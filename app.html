@@ -1,0 +1,2506 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAVIN — نظام تقييم زيارات الجودة</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
+<!-- PWA: installable as an app from GitHub Pages (Add to Home Screen / desktop install) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#56061F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RAVIN QC">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>
+/* Blocking auth guard: redirect to the login page before anything renders if there's no session. */
+(function(){
+  try{
+    var raw = localStorage.getItem('ravin_qc_session_v1');
+    if(!raw){ location.replace('index.html'); }
+  }catch(e){ location.replace('index.html'); }
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="auth.js"></script>
+<style>
+/* ============================= TOKENS ============================= */
+:root{
+  --bg:#FAF9F6;
+  --surface:#FFFFFF;
+  --surface-2:#F3F1EC;
+  --line:#E2DFD6;
+  --line-strong:#CBC6B8;
+  --ink:#201C17;
+  --ink-soft:#5B564C;
+  --ink-faint:#8B8578;
+  --wine:#7A1230;
+  --wine-deep:#56061F;
+  --wine-tint:#F7E8EC;
+  --gold:#A9802F;
+  --gold-tint:#F7EFDD;
+  --pass:#1E6B3E;
+  --pass-tint:#E6F2EA;
+  --partial:#A9720C;
+  --partial-tint:#FBF0DC;
+  --fail:#A3281E;
+  --fail-tint:#FBE8E6;
+  --crit-bg:#56061F;
+  --radius:3px;
+  --radius-lg:6px;
+  --shadow-card:0 1px 2px rgba(32,28,23,.06);
+  --font:'Cairo',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+:root:not([data-theme="light"]){ }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15130F; --surface:#1D1A15; --surface-2:#242019; --line:#352F26; --line-strong:#4A4234;
+    --ink:#EFEAE0; --ink-soft:#BCB4A3; --ink-faint:#8B8575;
+    --wine-tint:#2A1017; --gold-tint:#2A2212; --pass-tint:#102A1A; --partial-tint:#2E2208; --fail-tint:#2E1310;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15130F; --surface:#1D1A15; --surface-2:#242019; --line:#352F26; --line-strong:#4A4234;
+  --ink:#EFEAE0; --ink-soft:#BCB4A3; --ink-faint:#8B8575;
+  --wine-tint:#2A1017; --gold-tint:#2A2212; --pass-tint:#102A1A; --partial-tint:#2E2208; --fail-tint:#2E1310;
+}
+*{box-sizing:border-box;}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+body{
+  margin:0;font-family:var(--font);background:var(--bg);color:var(--ink);
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%;}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;}
+a{color:inherit;}
+button{font-family:inherit;}
+::selection{background:var(--wine);color:#fff;}
+
+/* ============================= TOPBAR ============================= */
+.topbar{
+  position:sticky;top:0;z-index:40;background:var(--wine-deep);color:#F4E9E3;
+  padding-top:env(safe-area-inset-top,0px);
+  border-bottom:3px solid var(--gold);
+}
+.topbar-inner{max-width:1180px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.brand{display:flex;align-items:baseline;gap:10px;}
+.brand .mark{font-weight:900;font-size:22px;letter-spacing:.5px;color:#fff;}
+.brand .sub{font-size:12px;color:#D9B6A5;font-weight:600;}
+.topbar-score{margin-inline-start:auto;display:flex;align-items:center;gap:14px;}
+.topbar-score .num{font-family:var(--mono);font-weight:700;font-size:20px;}
+.topbar-score .lbl{font-size:11px;color:#D9B6A5;}
+.theme-toggle{
+  border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);color:#F4E9E3;
+  border-radius:var(--radius);padding:6px 10px;font-size:12px;cursor:pointer;
+}
+.user-chip{text-align:left;line-height:1.3;}
+.user-chip .uc-name{font-size:12.5px;font-weight:700;color:#fff;}
+.user-chip .uc-role{font-size:10.5px;color:#D9B6A5;}
+.read-only-banner{
+  display:none;background:var(--gold-tint);color:#5B4216;font-size:12px;font-weight:700;
+  text-align:center;padding:6px 10px;border-top:1px solid rgba(169,128,47,.3);
+}
+body.role-branch .read-only-banner{display:block;}
+body.role-branch .admin-only{display:none!important;}
+body.role-branch input,
+body.role-branch select,
+body.role-branch textarea{pointer-events:none!important;background:var(--surface-2)!important;}
+body.role-branch .acc-head{cursor:pointer;} /* still allow opening/closing sections to browse */
+
+.tabs{display:flex;gap:2px;background:var(--surface-2);border-bottom:1px solid var(--line);
+  overflow-x:auto;position:sticky;top:0;z-index:30;}
+.tabs.stuck{top:0;}
+.tab-btn{
+  flex:0 0 auto;padding:13px 18px;font-size:14px;font-weight:600;color:var(--ink-soft);
+  background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;
+  text-decoration:none;display:inline-block;
+}
+.tab-btn.active{color:var(--wine);border-bottom-color:var(--wine);background:var(--surface);}
+
+.view{display:none;padding:22px 0 60px;}
+.view.active{display:block;}
+
+/* ============================= SECTION / CARD ============================= */
+.section-title{display:flex;align-items:baseline;gap:10px;margin:28px 0 12px;}
+.section-title h2{font-size:18px;margin:0;font-weight:800;}
+.section-title .count{font-size:12px;color:var(--ink-faint);font-family:var(--mono);}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);}
+.panel + .panel{margin-top:14px;}
+.panel-pad{padding:18px;}
+
+/* visit info */
+.visit-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px;}
+@media (max-width:860px){.visit-grid{grid-template-columns:repeat(2,1fr);}}
+.field label{display:block;font-size:11px;color:var(--ink-faint);margin-bottom:5px;font-weight:600;}
+.field input,.field select,.field textarea{
+  width:100%;border:1px solid var(--line-strong);border-radius:var(--radius);padding:8px 10px;
+  font-family:inherit;font-size:13.5px;background:var(--surface);color:var(--ink);
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--wine);outline-offset:1px;}
+
+/* dashboard cards */
+.cards-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media (max-width:980px){.cards-grid{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:560px){.cards-grid{grid-template-columns:1fr 1fr;}}
+.dash-hero-row{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px;}
+@media (max-width:640px){.dash-hero-row{grid-template-columns:1fr;}}
+.dash-roles-row{margin-top:0;grid-template-columns:repeat(5,1fr);}
+@media (max-width:980px){.dash-roles-row{grid-template-columns:repeat(3,1fr);}}
+@media (max-width:560px){.dash-roles-row{grid-template-columns:1fr 1fr;}}
+.score-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow-card);}
+.score-card.hero{background:linear-gradient(135deg,var(--wine-deep),var(--wine));color:#fff;border:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px 16px;}
+.score-card.hero .bar{width:100%;max-width:260px;}
+.score-card.errors{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+.score-card .k{font-size:11.5px;color:var(--ink-faint);font-weight:700;}
+.score-card.hero .k{color:#E9C9B9;}
+.score-card .v{font-family:var(--mono);font-size:30px;font-weight:700;margin:4px 0 6px;}
+.score-card.hero .v{font-size:40px;}
+.score-card .bar{height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;}
+.score-card.hero .bar{background:rgba(255,255,255,.22);}
+.score-card .bar > i{display:block;height:100%;border-radius:3px;}
+.score-card .status{display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+.score-card .note{font-size:10.5px;color:var(--ink-faint);margin-top:6px;}
+.score-card.hero .note{color:#E9C9B9;}
+
+.status-pass{color:var(--pass);background:var(--pass-tint);}
+.status-partial{color:var(--partial);background:var(--partial-tint);}
+.status-fail{color:var(--fail);background:var(--fail-tint);}
+
+/* accordion */
+.accordion{border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface);}
+.accordion + .accordion{margin-top:10px;}
+.acc-head{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;background:var(--surface);
+  border:none;width:100%;text-align:right;font-family:inherit;
+}
+.acc-head:hover{background:var(--surface-2);}
+.acc-head .role{font-weight:800;font-size:15px;}
+.acc-head .meta{font-size:12px;color:var(--ink-faint);font-family:var(--mono);}
+.acc-head .pct{margin-inline-start:auto;font-family:var(--mono);font-weight:700;font-size:16px;}
+.acc-head .chev{transition:transform .15s ease;color:var(--ink-faint);}
+.accordion.open .chev{transform:rotate(90deg);}
+.acc-body{display:none;border-top:1px solid var(--line);}
+.accordion.open .acc-body{display:block;}
+
+/* audit item */
+.item{padding:14px 16px;border-bottom:1px solid var(--line);}
+.item:last-child{border-bottom:none;}
+.item-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+.item-name{font-weight:700;font-size:13.8px;flex:1 1 260px;min-width:200px;}
+.item-desc{font-size:12px;color:var(--ink-soft);margin-top:3px;line-height:1.55;}
+.item-rule{font-size:11.5px;color:var(--gold);margin-top:4px;background:var(--gold-tint);display:inline-block;padding:2px 8px;border-radius:12px;}
+.item-ctrl{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
+.item-ctrl select,.item-ctrl input[type=number]{
+  border:1px solid var(--line-strong);border-radius:var(--radius);padding:7px 8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);
+}
+.item-ctrl input[type=number]{width:72px;}
+.badge-score{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border-radius:14px;padding:3px 10px;white-space:nowrap;}
+.badge-status{font-size:11px;font-weight:700;border-radius:14px;padding:3px 10px;white-space:nowrap;}
+.finding-box{margin-top:10px;padding:12px;border:1px dashed var(--fail);border-radius:var(--radius);background:var(--fail-tint);display:none;}
+.finding-box.show{display:block;}
+.finding-box .warn{font-size:12px;font-weight:700;color:var(--fail);margin-bottom:8px;}
+.finding-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media (max-width:640px){.finding-grid{grid-template-columns:1fr;}}
+.finding-grid textarea{min-height:46px;resize:vertical;}
+.finding-grid .full{grid-column:1/-1;}
+.evid-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
+.evid-thumb{width:46px;height:46px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--line);}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--surface);
+  color:var(--ink);padding:8px 14px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;}
+.btn:hover{background:var(--surface-2);}
+.btn-primary{background:var(--wine);border-color:var(--wine);color:#fff;}
+.btn-primary:hover{background:var(--wine-deep);}
+.btn-ghost{border-color:transparent;background:transparent;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-danger{color:var(--fail);border-color:var(--fail);}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;}
+.spacer{flex:1;}
+
+/* findings table */
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);}
+table{width:100%;border-collapse:collapse;font-size:12.8px;min-width:900px;}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top;}
+th{background:var(--surface-2);font-size:11.5px;color:var(--ink-faint);font-weight:700;position:sticky;top:0;}
+tr:last-child td{border-bottom:none;}
+.sev-tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;}
+.sev-low{background:var(--surface-2);color:var(--ink-soft);}
+.sev-medium{background:var(--partial-tint);color:var(--partial);}
+.sev-high{background:#FBDFCB;color:#9A4A0C;}
+.sev-critical{background:var(--crit-bg);color:#fff;}
+
+/* final result */
+.final-hero{background:linear-gradient(135deg,var(--wine-deep),var(--wine));color:#fff;border-radius:var(--radius-lg);padding:30px;text-align:center;}
+.final-hero .big{font-family:var(--mono);font-size:56px;font-weight:700;}
+.final-hero .lbl{font-size:13px;color:#E9C9B9;font-weight:700;letter-spacing:.3px;}
+.final-hero .tag{display:inline-block;margin-top:10px;padding:5px 16px;border-radius:20px;font-weight:700;font-size:13px;}
+.mini-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:16px;}
+@media (max-width:860px){.mini-grid{grid-template-columns:repeat(2,1fr);}}
+.mini-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;text-align:center;color:var(--ink);}
+.mini-card .v{font-family:var(--mono);font-weight:700;font-size:20px;color:var(--ink);}
+.mini-card .k{font-size:11px;color:var(--ink-faint);margin-top:2px;}
+
+/* checklist for completion */
+.checklist li{list-style:none;display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;}
+.checklist li .dot{width:9px;height:9px;border-radius:50%;background:var(--line-strong);flex:0 0 auto;}
+.checklist li.ok .dot{background:var(--pass);}
+.checklist li.bad .dot{background:var(--fail);}
+
+/* history */
+.hist-row{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+.hist-row:last-child{border-bottom:none;}
+.hist-row .hb{font-weight:700;}
+.hist-row .hs{font-size:12px;color:var(--ink-faint);}
+.hist-row .hv{font-family:var(--mono);font-weight:700;margin-inline-start:auto;}
+
+/* inventory */
+.inv-grid-head,.inv-grid-row{display:grid;grid-template-columns:1.3fr 1fr .8fr .9fr .9fr .8fr .9fr .9fr 36px;gap:6px;align-items:center;padding:8px 10px;}
+.inv-grid-head{font-size:11px;color:var(--ink-faint);font-weight:700;background:var(--surface-2);}
+.inv-grid-row{border-top:1px solid var(--line);font-size:12.5px;}
+.inv-grid-row input,.inv-grid-row select{width:100%;border:1px solid var(--line-strong);border-radius:var(--radius);padding:5px 6px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--ink);}
+.inv-wrap{overflow-x:auto;}
+.inv-wrap .inv-grid-head,.inv-wrap .inv-grid-row{min-width:900px;}
+.icon-btn{border:none;background:none;color:var(--fail);cursor:pointer;font-size:15px;}
+.allow-box{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px;}
+@media (max-width:760px){.allow-box{grid-template-columns:repeat(2,1fr);}}
+.inv-input-strong{width:64px;font-weight:800;font-size:15px;text-align:center;padding:7px 4px;
+  border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);}
+.inv-input-strong:focus{outline:2px solid var(--wine);outline-offset:1px;border-color:var(--wine);}
+.inv-input-strong:disabled{background:var(--surface-2);color:var(--ink-faint);font-weight:700;}
+.inv-code-row{cursor:pointer;}
+.inv-code-row:hover{background:var(--surface-2);}
+.bal-badge{font-size:11px;font-weight:700;border-radius:14px;padding:3px 10px;white-space:nowrap;}
+.bal-balanced{color:var(--pass);background:var(--pass-tint);}
+.bal-shortage{color:var(--fail);background:var(--fail-tint);}
+.bal-excess{color:var(--partial);background:var(--partial-tint);}
+.bal-size_reconciliation{color:#1F4E8C;background:#E6EDF7;}
+.bal-not_counted{color:var(--ink-faint);background:var(--surface-2);}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(20,16,12,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;}
+.modal-bg.show{display:flex;}
+.modal{background:var(--surface);border-radius:var(--radius-lg);max-width:420px;width:100%;padding:20px;max-height:85vh;overflow:auto;}
+.modal h3{margin:0 0 10px;font-size:16px;}
+.modal img{width:100%;border-radius:var(--radius);margin-top:8px;}
+
+/* misc */
+.hint{font-size:11.5px;color:var(--ink-faint);line-height:1.6;}
+.empty{padding:30px;text-align:center;color:var(--ink-faint);font-size:13px;}
+.search-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.search-row input[type=text]{flex:1;min-width:180px;border:1px solid var(--line-strong);border-radius:var(--radius);padding:8px 10px;font-family:inherit;background:var(--surface);color:var(--ink);}
+.chip{border:1px solid var(--line-strong);background:var(--surface);padding:6px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:600;color:var(--ink-soft);}
+.chip.active{background:var(--wine);border-color:var(--wine);color:#fff;}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:10px 18px;border-radius:20px;font-size:13px;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+.footer-note{text-align:center;color:var(--ink-faint);font-size:11.5px;padding:24px 0 10px;}
+
+/* print */
+@media print{
+  .topbar,.tabs,.toolbar,.no-print,.theme-toggle{display:none!important;}
+  body{background:#fff;color:#000;}
+  .view{display:none!important;padding:0;}
+  #printArea{display:block!important;}
+  .panel,.accordion,.score-card{box-shadow:none;border-color:#999;}
+  a[href]:after{content:none;}
+}
+#printArea{display:none;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="mark">RAVIN</span>
+      <span class="sub">QUALITY CONTROL — AUDIT VISIT</span>
+    </div>
+    <div class="topbar-score no-print">
+      <div>
+        <div class="num" id="topbarScore">—</div>
+        <div class="lbl">النتيجة الإجمالية</div>
+      </div>
+      <div class="user-chip" id="userChip">
+        <div class="uc-name" id="userChipName">—</div>
+        <div class="uc-role" id="userChipRole">—</div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button">🌓 الوضع</button>
+      <button class="theme-toggle" id="logoutBtn" type="button">خروج</button>
+    </div>
+  </div>
+  <div class="tabs no-print" id="tabs">
+    <button class="tab-btn active" data-view="audit">التقييم</button>
+    <button class="tab-btn" data-view="findings">الأخطاء المرصودة</button>
+    <button class="tab-btn" data-view="inventory">الجرد</button>
+    <button class="tab-btn" data-view="moneymap">MAP CHECK</button>
+    <button class="tab-btn" data-view="maintenance">الصيانة</button>
+    <button class="tab-btn" data-view="result">النتيجة النهائية</button>
+    <button class="tab-btn" data-view="history">سجل الزيارات</button>
+    <a class="tab-btn admin-only" href="returns.html">مراجعة المرتجعات</a>
+    <a class="tab-btn admin-only" href="sales-analysis.html">تحليل المبيعات</a>
+  </div>
+  <div class="read-only-banner" id="readOnlyBanner">وضع عرض فقط — فرع <span id="readOnlyBranch">—</span>: متابعة الزيارات بدون تعديل</div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================= AUDIT VIEW ============================= -->
+<div class="view active" id="view-audit">
+
+  <div class="section-title"><h2>بيانات الزيارة</h2></div>
+  <div class="panel">
+    <div class="visit-grid" id="visitGrid"></div>
+  </div>
+
+  <div class="section-title"><h2>لوحة النتائج</h2><span class="count" id="dashCount"></span></div>
+  <div class="dash-hero-row" id="dashHeroRow"></div>
+  <div class="cards-grid dash-roles-row" id="dashCards"></div>
+
+  <div class="toolbar no-print">
+    <div class="search-row" style="flex:1">
+      <input type="text" id="itemSearch" placeholder="بحث داخل بنود التقييم...">
+    </div>
+    <button class="btn" id="expandAll" type="button">فتح الكل</button>
+    <button class="btn" id="collapseAll" type="button">غلق الكل</button>
+  </div>
+
+  <div class="section-title"><h2>أقسام التقييم</h2></div>
+  <div id="sectionsHost"></div>
+
+</div>
+
+<!-- ============================= FINDINGS VIEW ============================= -->
+<div class="view" id="view-findings">
+  <div class="section-title"><h2>الأخطاء المرصودة — Audit Findings</h2><span class="count" id="findCount"></span></div>
+  <div class="table-wrap">
+    <table id="findingsTable">
+      <thead><tr>
+        <th>القسم</th><th>البند</th><th>الملاحظة</th><th>تأثير الدرجة</th><th>صورة</th>
+      </tr></thead>
+      <tbody id="findingsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================= INVENTORY VIEW ============================= -->
+<div class="view" id="view-inventory">
+  <div class="section-title"><h2>الجرد — INVENTORY AUDIT</h2></div>
+
+  <div class="panel panel-pad">
+    <p class="hint">ارفع ملف الاستوك الخاص بالفرع (أعمدة: Code / Department / Price / Size / System Qty). هيتبنى منه شيت جرد بكل كود ومقاس، وتدخل أنت "الفعلى" لكل صنف — والفرق وقيمته بيتحسبوا أوتوماتيك فوراً. أي اختلاف (عجز أو زيادة) بيظهر زي ما هو، من غير أي نسبة سماح.</p>
+    <div class="toolbar no-print" style="margin:4px 0 0;">
+      <label class="btn btn-primary" style="cursor:pointer;">+ UPLOAD STOCK FILE
+        <input type="file" id="stockUpload" accept=".xlsx,.xls,.csv" style="display:none;">
+      </label>
+      <span class="hint" id="stockUploadStatus"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="saveCountBtn" type="button">💾 SAVE COUNT</button>
+      <button class="btn" id="exportInvBtn" type="button">⇩ EXPORT INVENTORY RESULT</button>
+      <button class="btn btn-danger" id="clearInvRows" type="button">تفريغ شيت الجرد</button>
+    </div>
+    <div id="stockValidationBox" style="display:none;margin-top:10px;padding:12px;border:1px dashed var(--fail);border-radius:3px;background:var(--fail-tint);">
+      <div style="font-weight:700;color:var(--fail);">Invalid Stock File</div>
+      <div id="stockValidationMsg" style="font-size:12.5px;margin-top:4px;color:var(--fail);"></div>
+    </div>
+  </div>
+
+  <!-- progress -->
+  <div class="panel panel-pad">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="font-weight:700;font-size:13px;">Counting Progress</div>
+      <div id="invProgressLabel" style="font-family:var(--mono);font-weight:700;font-size:13px;">0 / 0 — 0%</div>
+    </div>
+    <div class="bar" style="height:8px;"><i id="invProgressBar" style="width:0%;background:var(--wine);"></i></div>
+  </div>
+
+  <!-- current filter indicator -->
+  <div style="margin-top:14px;font-size:12.5px;color:var(--ink-faint);">
+    CURRENT FILTER: <strong id="invCurrentFilter" style="color:var(--wine);">All Items</strong>
+    <button class="btn btn-sm btn-ghost no-print" id="invClearFilters" type="button" style="margin-inline-start:8px;">CLEAR FILTERS</button>
+  </div>
+
+  <!-- INVENTORY AUDIT summary cards (computed from FILTERED data only) -->
+  <div class="cards-grid" id="invSummaryCards" style="margin-top:10px;"></div>
+
+  <!-- filters -->
+  <div class="toolbar no-print" style="margin-top:18px;">
+    <span class="hint" style="font-weight:700;">Balance Status:</span>
+    <div class="chip active" data-inv-balance="all">All</div>
+    <div class="chip" data-inv-balance="balanced">Balanced</div>
+    <div class="chip" data-inv-balance="size_reconciliation">Size Reconciliation</div>
+    <div class="chip" data-inv-balance="shortage">Shortage</div>
+    <div class="chip" data-inv-balance="excess">Excess</div>
+    <div class="chip" data-inv-balance="not_counted">Not Counted</div>
+  </div>
+  <div class="toolbar no-print" style="margin-top:4px;">
+    <span class="hint" style="font-weight:700;">Counting Status:</span>
+    <div class="chip active" data-inv-counting="all">All</div>
+    <div class="chip" data-inv-counting="counted">Counted</div>
+    <div class="chip" data-inv-counting="not_counted">Not Counted</div>
+    <span class="spacer"></span>
+    <select id="invDeptFilter" style="border:1px solid var(--line-strong);border-radius:3px;padding:7px 10px;font-family:inherit;background:var(--surface);color:var(--ink);"><option value="all">All Departments</option></select>
+    <select id="invSizeFilter" style="border:1px solid var(--line-strong);border-radius:3px;padding:7px 10px;font-family:inherit;background:var(--surface);color:var(--ink);"><option value="all">All Sizes</option></select>
+  </div>
+  <div class="search-row" style="margin-bottom:10px;">
+    <input type="text" id="invSearch" placeholder="بحث بالكود / القسم / المقاس…">
+  </div>
+
+  <div class="panel">
+    <div class="inv-wrap">
+      <table id="invTable" style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr>
+            <th>Code</th><th>Department</th><th>Price</th><th>Size</th><th>System</th>
+            <th>Warehouse</th><th>Display</th><th>Actual</th><th>Difference</th><th>Difference Value</th><th>Balance Status</th>
+          </tr>
+        </thead>
+        <tbody id="invBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CODE-LEVEL SUMMARY -->
+  <div class="section-title"><h2>CODE-LEVEL SUMMARY</h2><span class="count" id="codeSummaryCount"></span></div>
+  <div class="panel">
+    <div class="inv-wrap">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr><th>Code</th><th>Department</th><th>System Total</th><th>Actual Total</th><th>Difference</th><th>Status</th></tr></thead>
+        <tbody id="codeSummaryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FINAL INVENTORY RESULT -->
+  <div class="section-title"><h2>INVENTORY AUDIT RESULT</h2></div>
+  <div class="final-hero" id="invFinalHero">
+    <div class="lbl">NET DIFFERENCE (PIECES)</div>
+    <div class="big" id="invFinalNet">—</div>
+    <div class="tag" id="invFinalTag">—</div>
+    <div class="mini-grid">
+      <div class="mini-card"><div class="v" id="ifSystem">—</div><div class="k">System Quantity</div></div>
+      <div class="mini-card"><div class="v" id="ifActual">—</div><div class="k">Actual Quantity</div></div>
+      <div class="mini-card"><div class="v" id="ifShortage">—</div><div class="k">Total Shortage</div></div>
+      <div class="mini-card"><div class="v" id="ifExcess">—</div><div class="k">Total Excess</div></div>
+      <div class="mini-card"><div class="v" id="ifValue">—</div><div class="k">Difference Value (EGP)</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================= MAP CHECK VIEW ============================= -->
+<div class="view" id="view-moneymap">
+  <div class="section-title">
+    <h2>Map Check — فحص اللوكيشن</h2>
+    <button class="btn no-print" id="mcBackBtn" type="button" style="margin-inline-start:auto;">→ رجوع للفرع</button>
+  </div>
+
+  <div class="panel panel-pad" id="mcBranchHint" style="display:none;">
+    <p class="hint">اختر الفرع من "بيانات الزيارة" في تاب التقييم الأول عشان تقدر ترفع ماب الفرع وتبدأ الفحص.</p>
+  </div>
+
+  <div class="panel panel-pad" id="mcMainPanel">
+    <p class="hint">خاص بفرع <strong id="mcBranchName">—</strong> — ارفع شيت الـ MAP LOC بعمودين بالترتيب: <strong>الكود</strong> ثم <strong>اللوكيشن</strong>. الملف ده بيتحفظ لهذا الفرع لوحده، ومش بيتأثر بحفظ/تصفير الزيارة، عشان تقدر تستخدمه في أي زيارة جاية لنفس الفرع.</p>
+    <div class="toolbar no-print" style="margin:4px 0 0;">
+      <label class="btn btn-primary" style="cursor:pointer;">+ رفع شيت MAP LOC
+        <input type="file" id="mcUploadInput" accept=".xlsx,.xls,.csv" style="display:none;">
+      </label>
+      <span class="hint" id="mcUploadStatus"></span>
+      <span class="spacer"></span>
+      <button class="btn btn-danger" id="mcClearMapBtn" type="button">تفريغ ماب الفرع</button>
+    </div>
+    <div id="mcValidationBox" style="display:none;margin-top:10px;padding:12px;border:1px dashed var(--fail);border-radius:3px;background:var(--fail-tint);">
+      <div style="font-weight:700;color:var(--fail);">Invalid MAP LOC File</div>
+      <div id="mcValidationMsg" style="font-size:12.5px;margin-top:4px;color:var(--fail);"></div>
+    </div>
+  </div>
+
+  <div class="panel panel-pad" id="mcImagePanel" style="margin-top:14px;">
+    <div class="toolbar no-print" style="margin:0;">
+      <label class="btn" style="cursor:pointer;">🗺️ رفع صورة الماب الكاملة
+        <input type="file" id="mcMapImageInput" accept="image/*" style="display:none;">
+      </label>
+      <span class="hint" id="mcMapImageStatus">لم يتم رفع صورة للماب بعد</span>
+      <span class="spacer"></span>
+      <button class="btn btn-danger" id="mcMapImageRemoveBtn" type="button" style="display:none;">إزالة الصورة</button>
+    </div>
+    <div id="mcMapImageWrap" style="display:none;margin-top:10px;">
+      <img id="mcMapImagePreview" alt="صورة الماب" style="max-width:100%;max-height:520px;border:1px solid var(--line-strong);border-radius:4px;display:block;">
+    </div>
+  </div>
+
+  <div class="cards-grid" id="mcSummaryCards" style="margin-top:14px;"></div>
+
+  <div class="panel panel-pad" id="mcCheckPanel" style="margin-top:14px;">
+    <div class="toolbar no-print" style="margin:0;">
+      <div class="field" style="flex:1;min-width:200px;margin:0;">
+        <label>اللوكيشن اللي بيتم فحصه دلوقتي</label>
+        <select id="mcLocationSelect"><option value="">اختر لوكيشن…</option></select>
+      </div>
+      <div class="field" style="min-width:160px;margin:0;">
+        <label id="mcLocationProgressLbl">—</label>
+        <div class="bar" style="height:8px;margin-top:6px;"><i id="mcLocationBar" style="width:0%;background:var(--wine);"></i></div>
+      </div>
+    </div>
+    <div class="toolbar no-print">
+      <input type="text" id="mcCodeInput" placeholder="اكتب أو اعمل سكان للكود وبعدين Enter…" style="flex:1;min-width:200px;border:1px solid var(--line-strong);border-radius:3px;padding:9px 11px;font-family:var(--mono);font-size:14px;background:var(--surface);color:var(--ink);">
+      <button class="btn btn-primary" id="mcCheckBtn" type="button">فحص</button>
+    </div>
+    <div id="mcLastResult" style="display:none;margin-top:10px;padding:10px 14px;border-radius:3px;font-weight:700;text-align:center;"></div>
+    <div class="toolbar no-print" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px;">
+      <button class="btn btn-danger" id="mcNewSessionBtn" type="button">↺ بدء فحص جديد (تصفير السجل فقط)</button>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" id="mcFinalizeBtn" type="button">✓ تم الانتهاء — تنزيل تقرير Excel</button>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>سجل الفحص — Scan Log</h2><span class="count" id="mcLogCount"></span></div>
+  <div class="table-wrap">
+    <table id="mcLogTable">
+      <thead><tr><th>الوقت</th><th>اللوكيشن المختار</th><th>الكود</th><th>اللوكيشن الصحيح</th><th>النتيجة</th></tr></thead>
+      <tbody id="mcLogBody"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title"><h2>حالة أكواد الماب</h2><span class="count" id="mcRowsCount"></span></div>
+  <div class="table-wrap">
+    <table id="mcRowsTable">
+      <thead><tr><th>الكود</th><th>اللوكيشن الصحيحة</th><th>آخر فحص</th><th>الحالة</th></tr></thead>
+      <tbody id="mcRowsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================= MAINTENANCE VIEW ============================= -->
+<div class="view" id="view-maintenance">
+  <div class="section-title"><h2>الصيانة — ملاحظات وتوصيات الصيانة</h2></div>
+
+  <div class="panel panel-pad" id="maintBranchHint" style="display:none;">
+    <p class="hint">اختر الفرع من "بيانات الزيارة" في تاب التقييم الأول عشان تقدر تسجّل أو تتابع ملاحظات الصيانة الخاصة بيه.</p>
+  </div>
+
+  <div class="panel panel-pad" id="maintFormPanel">
+    <div class="section-title" style="margin:0 0 10px;"><h2 style="font-size:15px;">تسجيل ملاحظة صيانة جديدة — فرع <span id="maintBranchName">—</span></h2></div>
+    <div class="finding-grid">
+      <div class="full"><textarea id="maintDesc" placeholder="وصف المشكلة (مثال: تكييف الصالة مش بيبرد)"></textarea></div>
+      <div><input type="text" id="maintArea" placeholder="المكان/المنطقة (اختياري)"></div>
+    </div>
+    <div class="toolbar no-print" style="margin-top:10px;">
+      <button class="btn btn-primary" id="maintAddBtn" type="button">+ تسجيل الملاحظة</button>
+    </div>
+  </div>
+
+  <div class="cards-grid" id="maintSummaryCards" style="margin-top:14px;"></div>
+
+  <div class="section-title"><h2>ملاحظات الصيانة — فرع <span id="maintListBranchName">—</span></h2><span class="count" id="maintListCount"></span></div>
+  <div class="panel" id="maintListPanel"><div class="empty">لا توجد ملاحظات صيانة مسجّلة بعد لهذا الفرع</div></div>
+</div>
+
+<!-- ============================= FINAL RESULT VIEW ============================= -->
+<div class="view" id="view-result">
+  <div class="section-title"><h2>النتيجة النهائية للزيارة</h2></div>
+  <div class="final-hero">
+    <div class="lbl">OVERALL AUDIT SCORE</div>
+    <div class="big" id="finalBig">—</div>
+    <div class="mini-grid">
+      <div class="mini-card"><div class="v" id="finalManager">—</div><div class="k">المدير</div></div>
+      <div class="mini-card"><div class="v" id="finalCashier">—</div><div class="k">الكاشير</div></div>
+      <div class="mini-card"><div class="v" id="finalAssMerch">—</div><div class="k">نائب المرشنديزر</div></div>
+      <div class="mini-card"><div class="v" id="finalMerch">—</div><div class="k">المرشنديزر</div></div>
+      <div class="mini-card"><div class="v" id="finalCoord">—</div><div class="k">الكوردينيتور</div></div>
+    </div>
+  </div>
+  <p class="hint" style="margin-top:10px">النتيجة الإجمالية محسوبة بمتوسط (المدير، الكاشير، نائب المرشنديزر، المرشنديزر) طبقاً لمعادلة ملف الإكسل الأصلي. درجة الكوردينيتور تُعرض بشكل منفصل لأنها غير مُضمَّنة فى معادلة الإجمالي بالملف المصدر.
+    <label style="margin-inline-start:8px;"><input type="checkbox" id="includeCoordToggle"> تضمين الكوردينيتور في الحساب الإجمالي (اختياري)</label>
+  </p>
+
+  <div class="section-title"><h2>ملخص الزيارة</h2></div>
+  <div class="panel panel-pad">
+    <ul class="checklist" id="completionChecklist"></ul>
+    <div style="margin-top:8px;font-weight:700;">نسبة اكتمال التوثيق: <span id="completionPct">0%</span></div>
+  </div>
+
+  <div class="section-title"><h2>أهم الملاحظات</h2></div>
+  <div class="panel panel-pad" id="mainFindingsBox"><div class="empty">لا توجد ملاحظات مسجّلة بعد</div></div>
+
+  <div class="toolbar no-print">
+    <button class="btn btn-primary" id="generateReport" type="button">🖨 Generate Audit Report</button>
+    <button class="btn" id="exportCsv" type="button">⇩ تصدير CSV</button>
+    <button class="btn" id="saveVisit" type="button">💾 حفظ الزيارة</button>
+    <button class="btn btn-danger" id="resetVisit" type="button">↺ بدء زيارة جديدة</button>
+  </div>
+</div>
+
+<!-- ============================= HISTORY VIEW ============================= -->
+<div class="view" id="view-history">
+  <div class="section-title"><h2>سجل الزيارات المحفوظة</h2></div>
+  <div class="panel" id="historyPanel"><div class="empty">لا توجد زيارات محفوظة بعد</div></div>
+</div>
+
+</div><!-- /wrap -->
+
+<div class="footer-note no-print">RAVIN Quality Control Audit System — يعمل بالكامل محلياً داخل المتصفح (بدون إنترنت) ويحفظ البيانات على هذا الجهاز فقط.</div>
+
+<!-- ============================= PRINT AREA ============================= -->
+<div id="printArea"></div>
+
+<!-- Finding modal (evidence preview) -->
+<div class="modal-bg" id="evidModalBg">
+  <div class="modal">
+    <h3>الصورة الدليل</h3>
+    <img id="evidModalImg" src="">
+    <div style="margin-top:12px;text-align:left;"><button class="btn" id="evidModalClose" type="button">إغلاق</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   RAVIN QC AUDIT SYSTEM — data model
+   Extracted 1:1 from QC_VISIT__NEW1.xlsx (sheets: المدير & الكاشير,
+   النائب & المرشينديزر, الكورديتورِ, الكورديتورِ (ميجا), Final Result, STOCK).
+   Full scores and item names are preserved as in the source file;
+   rule text ("توضيح التقييم") is converted into JS scoring logic.
+   ===================================================================== */
+
+// ---- rule helpers ---------------------------------------------------
+function deductFor(rule, full, input){
+  if(rule.type==='manual') return clamp(input.score==null?full:input.score, 0, full);
+  if(rule.type==='binary' || rule.type==='select'){
+    var opt = (rule.options||[])[input.optIndex||0] || rule.options[0];
+    var ded = opt.deduction==='full'? full : (opt.deduction==='half'? full/2 : opt.deduction);
+    return clamp(full-ded,0,full);
+  }
+  if(rule.type==='threshold'){
+    var n = input.count||0;
+    for(var i=0;i<rule.tiers.length;i++){
+      var t=rule.tiers[i];
+      if(t.upTo===undefined || n<=t.upTo){
+        var ded = t.deduction==='full'?full:(t.deduction==='half'?full/2:t.deduction);
+        return clamp(full-ded,0,full);
+      }
+    }
+    return 0;
+  }
+  if(rule.type==='deduction'){
+    var n2 = input.count||0;
+    if(n2<=0) return full;
+    var keys = Object.keys(rule.table).map(Number).sort(function(a,b){return a-b;});
+    var ded2 = rule.table[keys[keys.length-1]];
+    for(var k=0;k<keys.length;k++){ if(n2<=keys[k]){ ded2 = rule.table[keys[k]]; break; } }
+    return clamp(full-ded2,0,full);
+  }
+  return full;
+}
+function clamp(v,a,b){ v=Number(v); if(isNaN(v))v=a; return Math.min(b,Math.max(a,v)); }
+
+// shared merchandiser 10-item checklist (identical across men/women/accessories per source sheet)
+function merchItemSet(){
+  return [
+    {name:'التاكيد على عدم وجود بضاعة لم يتم تسكينها', full:50, rule:{type:'manual'}},
+    {name:'تقسيم المخزن ديبرتمنت', full:10, rule:{type:'manual'}},
+    {name:'المراجعة على تكيس الموديلات', full:10, rule:{type:'manual'}},
+    {name:'المراجعة على وضع المقاس من الكيس من الخارج', full:5, rule:{type:'manual'}},
+    {name:'ترتيب المخزن مقاسات', full:10, rule:{type:'manual'}},
+    {name:'فايل مبيعات اليوم السابق', full:10, rule:{type:'manual'}},
+    {name:'نواقص العرض بالكامل', full:50, desc:'عدد النواقص بالعرض لكل موديل/كود.',
+      rule:{type:'threshold', tiers:[{upTo:1,deduction:0},{upTo:3,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى قطعة واحدة ناقصة؛ من 2 إلى 3 نص الدرجة؛ 4 فأكثر الدرجة كاملة (خصم كامل).'},
+    {name:'المراجعة على الاسعار 50 كود', full:10, desc:'مراجعة مطابقة الأسعار لعينة 50 كود.',
+      rule:{type:'select', options:[{label:'لا يوجد خطأ', deduction:0},{label:'خطأ فى الكود فقط', deduction:'half'},{label:'خطأ فى الكود + القطعة', deduction:'full'}]},
+      ruleText:'خطأ كود فقط = نص الدرجة، خطأ كود + قطعة = الدرجة كاملة (خصم كامل).'},
+    {name:'تركيب الالارمات', full:10, rule:{type:'manual'}},
+    {name:'الترصيد', full:18, rule:{type:'manual'}}
+  ];
+}
+
+var DATA = {
+  manager: { label:'المدير', color:'#7A1230', items:[
+    {name:'مجموع الكاشير الكوردينيتور', full:100, rule:{type:'manual'}},
+    {name:'جدول الشيفت', full:30, rule:{type:'manual'}},
+    {name:'الالتزام باليونيفورم', full:50, rule:{type:'manual'}},
+    {name:'مواعيد الفتح', full:50, rule:{type:'manual'}},
+    {name:'الصيانات والتكييفات', full:50, rule:{type:'manual'}},
+    {name:'مراجعة اعمال نائب المرشنديزر', full:100, rule:{type:'manual'}},
+    {name:'الديفوهات', full:50, rule:{type:'manual'}},
+    {name:'نظافة الفرع', full:100, rule:{type:'manual'}},
+    {name:'نظافة الواجهة', full:30, rule:{type:'manual'}},
+    {name:'المراجعة على مطابقة العهدة (المالية - ريكوست)', full:50, rule:{type:'manual'}},
+    {name:'كابل النت', full:60, rule:{type:'manual'}},
+    {name:'التداخل وسائل الدفع', full:50, rule:{type:'manual'}}
+  ]},
+  cashier: { label:'الكاشير', color:'#7A1230', items:[
+    {name:'الترصيد', full:50, rule:{type:'manual'}},
+    {name:'مراقبة المخزون', full:50, rule:{type:'manual'}},
+    {name:'مراجعة وضمان تحصيلات الفيزا', full:50, rule:{type:'manual'}},
+    {name:'ايداع البنوك', full:50, rule:{type:'manual'}},
+    {name:'نظافة الكاش', full:100, rule:{type:'manual'}},
+    {name:'متابعة ماكينات الفيزا', full:30, rule:{type:'manual'}},
+    {name:'ادارة النظم والمعلومات', full:100, rule:{type:'manual'}},
+    {name:'شكوى الخدمة', full:100, rule:{type:'manual'}},
+    {name:'نت الكاميرات', full:100, rule:{type:'manual'}}
+  ]},
+  assistantMerch: { label:'نائب المرشنديزر', color:'#1E6B3E', items:[
+    {name:'متابعة التحويلات', full:50, rule:{type:'manual'}},
+    {name:'تفعيل الاذون', full:50, rule:{type:'manual'}},
+    {name:'ارسال الديفوهات', full:30, rule:{type:'manual'}},
+    {name:'الالتزام بمواعيد الفتح', full:40, rule:{type:'manual'}},
+    {name:'الالتزام باليونيفورم', full:40, rule:{type:'manual'}},
+    {name:'ادارة المرشنديزر', full:100, rule:{type:'manual'}},
+    {name:'نظافة الفرع', full:15, rule:{type:'manual'}},
+    {name:'نظافة المخازن', full:15, rule:{type:'manual'}},
+    {name:'الترصيد', full:100, rule:{type:'manual'}},
+    {name:'التداخل وسائل الدفع', full:30, rule:{type:'manual'}}
+  ]},
+  merchMen: { label:'المرشنديزر — رجالي', color:'#1E6B3E', items: merchItemSet() },
+  merchWomen: { label:'المرشنديزر — حريمي', color:'#1E6B3E', items: merchItemSet() },
+  merchAccessories: { label:'المرشنديزر — اكسسوارات', color:'#1E6B3E', items: merchItemSet() },
+  coordinatorRegular: { label:'الكوردينيتور — فرع عادي', color:'#1F4E8C', items:[
+    {name:'Arrange Products by Size', desc:'ترتيب المقاسات وتوافرها بالعرض، والتأكيد على وضع أصغر مقاس بالأمام وأكبر مقاس بالخلف.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:5,deduction:0},{upTo:10,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 5 موديلات؛ من 6 إلى 10 نص الدرجة؛ 11 فأكثر الدرجة كاملة.'},
+    {name:'Revise All Sizes Available in Display', desc:'نواقص القطع من الكود ونواقص عدد الأكواد.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:4,deduction:0},{upTo:9,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 4 قطع؛ من 5 إلى 9 نص الدرجة؛ 10 فأكثر الدرجة كاملة.'},
+    {name:'Ensure All Hangers Showing Logo on Front Side', desc:'تواجد كلمة رافين الخاصة بالشماعة من الأمام وليس الخلف.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:5,deduction:0},{upTo:10,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 5 شماعات؛ من 6 إلى 10 نص الدرجة؛ 11 فأكثر الدرجة كاملة.'},
+    {name:'Footwear Wall — ربط الأربطة', desc:'ربط أربطة الشوزات وفقاً للجايد ووضعها داخل الشوز مع مرور الرباط بكل الفتحات.', full:50,
+      rule:{type:'deduction', table:{1:0,2:10,3:30,4:50}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 10؛ 3 أخطاء خصم 30؛ 4 فأكثر خصم 50.'},
+    {name:'Footwear Wall — اتجاه الشماعات', desc:'اتجاه شماعات الشوزات موحّد (اليمين فى استاند / الشمال فى استاند).', full:50,
+      rule:{type:'deduction', table:{1:0,2:10,3:30,4:50}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 10؛ 3 أخطاء خصم 30؛ 4 فأكثر خصم 50.'},
+    {name:'Jeans Wall', desc:'عرض أصغر مقاسات من قطعة إلى 3 قطع من كل الموديلات المطبقة أسفل الاستاند.', full:100,
+      rule:{type:'deduction', table:{1:0,2:25,3:75,4:100}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 25؛ 3 أخطاء خصم 75؛ 4 فأكثر خصم 100.'},
+    {name:'Accessories (تيبولات)', desc:'إدخال الليبلات داخل القطع الخاصة بالموديلات المتواجدة على التيبول.', full:100,
+      rule:{type:'deduction', table:{1:0,2:25,3:75,4:100}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 25؛ 3 أخطاء خصم 75؛ 4 فأكثر خصم 100.'},
+    {name:'Cleanliness', desc:'نظافة الوحدة بكل محتوياتها والموديلات.', full:100,
+      rule:{type:'deduction', table:{1:0,2:50,3:75,4:100}},
+      ruleText:'اتساخ واحد سماح؛ اتساخان خصم 50؛ 3 أخطاء خصم 75؛ 4 فأكثر خصم 100.'},
+    {name:'Ironing (المكواة)', desc:'كوي أول موديل بالأماميات والموديلات بالجانبي.', full:50,
+      rule:{type:'select', options:[{label:'مطابق (حتى موديلين بالجانبي)', deduction:0},{label:'أكثر من موديلين بالجانبي', deduction:'full'},{label:'قطعة واحدة بالأمامي غير مكوية', deduction:'full'}]},
+      ruleText:'سماح حتى موديلين بالجانبي؛ أكثر من ذلك أو قطعة واحدة بالأمامي = الدرجة كاملة (خصم كامل).'},
+    {name:'Defects Display (ديفوهات)', desc:'فحص العرض بالكامل من الديفوهات التي تضر المنظر العام للبراند.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:2,deduction:0},{upTo:4,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى قطعتين؛ من 2 إلى 4 نص الدرجة؛ 5 فأكثر الدرجة كاملة.'},
+    {name:'Price Signs (ساينات الأسعار)', desc:'تواجد الساين الخاص بجميع الوحدات (تعريفي/أوفر/سعر) + أقل سعر في الوحدة.', full:20,
+      rule:{type:'select', options:[{label:'كل الاستاندات بها ساين', deduction:0},{label:'يوجد استاند بدون ساين', deduction:'full'}]},
+      ruleText:'أي استاند بدون ساين = خصم النقطة كاملة.'},
+    {name:'Window Display (الويندو)', desc:'تنفيذ الويندو المرسلة من عدمه خلال 24 ساعة من استلام الميل.', full:50,
+      rule:{type:'select', options:[{label:'تم التنفيذ خلال 24 ساعة', deduction:0},{label:'لم يتم التنفيذ', deduction:'full'}]},
+      ruleText:'عدم التنفيذ خلال المهلة = خصم الدرجة كاملة.'},
+    {name:'Open', desc:'الالتزام بمواعيد الفتح', full:40, rule:{type:'manual'}},
+    {name:'uniform', desc:'الالتزام بالينويفورم', full:40, rule:{type:'manual'}},
+    {name:'Payment methods', desc:'التتداخل وسائل الدفع', full:30, rule:{type:'manual'}}
+  ]},
+  coordinatorMega: { label:'الكوردينيتور — فرع ميجا', color:'#1F4E8C', items:[
+    {name:'Arrange Products by Size', desc:'ترتيب المقاسات وتوافرها بالعرض، والتأكيد على وضع أصغر مقاس بالأمام وأكبر مقاس بالخلف.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:10,deduction:0},{upTo:15,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 10 موديلات؛ من 11 إلى 15 نص الدرجة؛ 16 فأكثر الدرجة كاملة.'},
+    {name:'Revise All Sizes Available in Display', desc:'نواقص القطع من الكود وزيادات العرض.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:10,deduction:0},{upTo:15,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 10 قطع؛ من 11 إلى 15 نص الدرجة؛ 16 فأكثر الدرجة كاملة.'},
+    {name:'Ensure All Hangers Showing Logo on Front Side', desc:'تواجد كلمة رافين الخاصة بالشماعة من الأمام وليس الخلف.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:10,deduction:0},{upTo:15,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى 10 شماعات؛ من 11 إلى 15 نص الدرجة؛ 16 فأكثر الدرجة كاملة.'},
+    {name:'Footwear Wall — ربط الأربطة', desc:'ربط أربطة الشوزات وفقاً للجايد ووضعها داخل الشوز مع مرور الرباط بكل الفتحات.', full:50,
+      rule:{type:'deduction', table:{1:0,2:10,3:30,4:50}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 10؛ 3 أخطاء خصم 30؛ 4 فأكثر خصم 50.'},
+    {name:'Footwear Wall — اتجاه الشماعات', desc:'اتجاه شماعات الشوزات موحّد (اليمين فى استاند / الشمال فى استاند).', full:50,
+      rule:{type:'deduction', table:{1:0,2:10,3:30,4:50}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 10؛ 3 أخطاء خصم 30؛ 4 فأكثر خصم 50.'},
+    {name:'Jeans Wall', desc:'عرض أصغر مقاسات من قطعة إلى 3 قطع من كل الموديلات المطبقة أسفل الاستاند.', full:100,
+      rule:{type:'deduction', table:{1:0,2:25,3:75,4:100}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 25؛ 3 أخطاء خصم 75؛ 4 فأكثر خصم 100.'},
+    {name:'Tables (التيبولات)', desc:'إدخال الليبلات داخل القطع الخاصة بالموديلات المتواجدة على التيبول.', full:100,
+      rule:{type:'deduction', table:{1:0,2:25,3:75,4:100}},
+      ruleText:'خطأ واحد سماح؛ خطآن خصم 25؛ 3 أخطاء خصم 75؛ 4 فأكثر خصم 100.'},
+    {name:'Cleanliness', desc:'نظافة الوحدة بكل محتوياتها والموديلات.', full:100,
+      rule:{type:'deduction', table:{1:0,2:0,3:50,4:75,5:100}},
+      ruleText:'سماح حتى اتساخين؛ 3 اتساخات خصم 50؛ 4 خصم 75؛ 5 فأكثر خصم 100.'},
+    {name:'Ironing (المكواة)', desc:'كوي أول موديل بالأماميات والموديلات بالجانبي.', full:50,
+      rule:{type:'select', options:[{label:'مطابق (حتى موديلين بالجانبي)', deduction:0},{label:'أكثر من موديلين بالجانبي', deduction:'full'},{label:'قطعة واحدة بالأمامي غير مكوية', deduction:'full'}]},
+      ruleText:'سماح حتى موديلين بالجانبي؛ أكثر من ذلك أو قطعة واحدة بالأمامي = الدرجة كاملة (خصم كامل).'},
+    {name:'Defects Display (ديفوهات)', desc:'فحص العرض بالكامل من الديفوهات التي تضر المنظر العام للبراند.', full:50,
+      rule:{type:'threshold', tiers:[{upTo:2,deduction:0},{upTo:4,deduction:'half'},{deduction:'full'}]},
+      ruleText:'سماح حتى قطعتين؛ من 2 إلى 4 نص الدرجة؛ 5 فأكثر الدرجة كاملة.'},
+    {name:'Price Signs (ساينات الأسعار)', desc:'تواجد الساين الخاص بجميع الوحدات (تعريفي/أوفر/سعر) + أقل سعر في الوحدة.', full:20,
+      rule:{type:'select', options:[{label:'كل الاستاندات بها ساين', deduction:0},{label:'يوجد استاند بدون ساين', deduction:'full'}]},
+      ruleText:'أي استاند بدون ساين = خصم النقطة كاملة.'},
+    {name:'Window Display (الويندو)', desc:'تنفيذ الويندو المرسلة من عدمه خلال 24 ساعة من استلام الميل.', full:50,
+      rule:{type:'select', options:[{label:'تم التنفيذ خلال 24 ساعة', deduction:0},{label:'لم يتم التنفيذ', deduction:'full'}]},
+      ruleText:'عدم التنفيذ خلال المهلة = خصم الدرجة كاملة.'},
+    {name:'Overall Shape & Closing the Branch', desc:'مراجعة التقفيل اليومي والتأكيد على عدم تواجد موديلات على الاستاندات بطريقة عشوائية.', full:30, rule:{type:'manual'}},
+    {name:'Open', desc:'الالتزام بمواعيد الفتح', full:40, rule:{type:'manual'}},
+    {name:'uniform', desc:'الالتزام بالينويفورم', full:40, rule:{type:'manual'}},
+    {name:'Payment methods', desc:'التتداخل وسائل الدفع', full:30, rule:{type:'manual'}}
+  ]}
+};
+
+// Grouping order shown in the Audit view + which keys feed the "Final Result" sheet formulas
+var SECTION_ORDER = ['manager','cashier','assistantMerch','merchMen','merchWomen','merchAccessories','coordinatorRegular','coordinatorMega'];
+
+// STOCK sheet reference lists (departments & sizes), used in the inventory module
+var STOCK_DEPTS = [4,8,10,12,28,29,30,31,32,33,34,36,37,38,39,40,41,42,43,44,45,105,110,115,120,125,130];
+var STOCK_SIZES = ['XS','S','M','L','XL','XXL','One Size'];
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+var STORAGE_KEY = 'ravin_qc_current_visit_v1';
+var HISTORY_KEY = 'ravin_qc_history_v1';
+
+function emptyVisit(){
+  var items = {};
+  SECTION_ORDER.forEach(function(secKey){
+    DATA[secKey].items.forEach(function(it,idx){
+      var id = secKey+'_'+idx;
+      items[id] = { count:0, optIndex:0, score:it.full, comment:'', evidence:null };
+    });
+  });
+  return {
+    visitInfo:{ branch:'', date:new Date().toISOString().slice(0,10), auditor:'',
+      manager:'', visitType:'KPI' },
+    branchKind:'regular', // 'regular' | 'mega' — decides which coordinator checklist is active
+    includeCoordInOverall:false,
+    items: items,
+    // rows: one row per Code+Size (long format):
+    // {code, dep, price, size, sys, warehouse, display, actualManual}
+    // warehouse/display/actualManual are null until the auditor types a value (0 is a valid entered value).
+    // Actual Qty = warehouse+display when either is entered (auto, read-only); otherwise actualManual (direct entry).
+    // No allowance/tolerance/percentage fields anywhere — exact pieces & value only.
+    inventory:{ rows:[] },
+    // Legacy field from the old per-visit "Money Map" module — kept only so older saved
+    // visits still load without error. Map Check data now lives per BRANCH; see
+    // MAPCHECK_KEY / mcDataFor() below, not here.
+    moneyMap:{ rows:[], log:[], mapImage:null }
+  };
+}
+
+var visit = loadVisit() || emptyVisit();
+
+function loadVisit(){
+  try{ var raw = localStorage.getItem(STORAGE_KEY); if(!raw) return null; var v = JSON.parse(raw);
+    // merge in any new item ids / fields that may not exist in an older save
+    var fresh = emptyVisit();
+    Object.keys(fresh.items).forEach(function(id){ if(!v.items[id]) v.items[id]=fresh.items[id]; });
+    if(!v.inventory) v.inventory = fresh.inventory;
+    if(!v.inventory.rows) v.inventory.rows = [];
+    // migrate any legacy inventory row shape (pre warehouse/display format) by resetting rows safely
+    var legacy = v.inventory.rows.some(function(r){ return r && (typeof r.size==='undefined' || typeof r.warehouse==='undefined'); });
+    if(legacy) v.inventory.rows = v.inventory.rows.map(function(r){
+      return { code:r.code, dep:r.dep, price:r.price, size:r.size, sys:r.sys,
+        warehouse:null, display:null, actualManual: (typeof r.actual==='number'? r.actual : null) };
+    });
+    delete v.inventory.sizeColumns; delete v.inventory.sales;
+    if(!v.moneyMap) v.moneyMap = fresh.moneyMap;
+    if(!v.moneyMap.rows) v.moneyMap.rows = [];
+    if(!v.moneyMap.log) v.moneyMap.log = [];
+    if(typeof v.moneyMap.mapImage==='undefined') v.moneyMap.mapImage = null;
+    if(typeof v.includeCoordInOverall!=='boolean') v.includeCoordInOverall=false;
+    return v;
+  }catch(e){ return null; }
+}
+function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(visit)); }catch(e){} }
+
+/* =====================================================================
+   SESSION / AUTH
+   Wires the login/role system (auth.js) into this page: who's signed in,
+   whether they can edit anything, and what they're allowed to see.
+   ===================================================================== */
+var SESSION = (typeof RavinAuth!=='undefined') ? RavinAuth.guard('index.html') : null;
+function isReadOnly(){ return !!(SESSION && SESSION.role==='branch'); }
+
+// Branch accounts only ever work with their own branch's visits — if the visit
+// currently sitting in localStorage belongs to someone else, start them on a
+// clean (unsaved) template instead of showing another branch's live data.
+if(SESSION && SESSION.role==='branch'){
+  if(visit.visitInfo.branch && visit.visitInfo.branch!==SESSION.branch){
+    visit = emptyVisit();
+  }
+  visit.visitInfo.branch = SESSION.branch;
+}
+
+function applyAuthUI(){
+  if(!SESSION) return;
+  document.body.classList.remove('role-admin','role-auditor','role-branch');
+  document.body.classList.add('role-'+SESSION.role);
+  var nameEl=document.getElementById('userChipName'), roleEl=document.getElementById('userChipRole');
+  if(nameEl) nameEl.textContent = SESSION.displayName||SESSION.username;
+  if(roleEl) roleEl.textContent = (typeof RavinAuth!=='undefined') ? RavinAuth.roleLabelAr(SESSION.role) : SESSION.role;
+  var brEl=document.getElementById('readOnlyBranch');
+  if(brEl) brEl.textContent = SESSION.branch||'';
+  if(isReadOnly()){
+    // Buttons that mutate shared data are explicitly disabled for branch accounts.
+    // (Inputs/selects/textareas are already blocked globally via CSS — see .role-branch rules —
+    // but plain <button> elements and <label>-wrapped file inputs need this too.)
+    ['saveVisit','resetVisit','saveCountBtn','clearInvRows','stockUpload',
+     'mcUploadInput','mcClearMapBtn','mcCheckBtn','mcNewSessionBtn','mcFinalizeBtn','maintAddBtn',
+     'mcMapImageInput','mcMapImageRemoveBtn'
+    ].forEach(function(id){ var el=document.getElementById(id); if(el) el.disabled=true; });
+  }
+}
+var logoutBtnEl = document.getElementById('logoutBtn');
+if(logoutBtnEl) logoutBtnEl.addEventListener('click', function(){
+  if(typeof RavinAuth!=='undefined') RavinAuth.logout();
+  location.href='index.html';
+});
+
+function activeCoordinatorKey(){ return visit.branchKind==='mega' ? 'coordinatorMega' : 'coordinatorRegular'; }
+function visibleSections(){
+  var coordKey = activeCoordinatorKey();
+  return SECTION_ORDER.filter(function(k){ return k==='coordinatorRegular'||k==='coordinatorMega' ? k===coordKey : true; });
+}
+
+/* =====================================================================
+   SCORING
+   ===================================================================== */
+function itemActual(secKey, idx){
+  var it = DATA[secKey].items[idx];
+  var id = secKey+'_'+idx;
+  var st = visit.items[id];
+  return deductFor(it.rule, it.full, st);
+}
+function sectionTotals(secKey){
+  var items = DATA[secKey].items, full=0, actual=0;
+  items.forEach(function(it,idx){ full+=it.full; actual+=itemActual(secKey,idx); });
+  return {full:full, actual:actual, pct: full? (actual/full*100):0};
+}
+function statusOf(actual, full){
+  if(full<=0) return 'pass';
+  if(actual>=full) return 'pass';
+  if(actual<=0) return 'fail';
+  return 'partial';
+}
+function statusLabelAr(s){ return s==='pass'?'مطابق':(s==='partial'?'يحتاج متابعة':'خطأ'); }
+
+function mergedMerchTotals(){
+  var a=sectionTotals('merchMen'), b=sectionTotals('merchWomen'), c=sectionTotals('merchAccessories');
+  var full=a.full+b.full+c.full, actual=a.actual+b.actual+c.actual;
+  return {full:full, actual:actual, pct: full? (actual/full*100):0};
+}
+function finalResultTotals(){
+  var mgr = sectionTotals('manager').pct;
+  var csh = sectionTotals('cashier').pct;
+  var ass = sectionTotals('assistantMerch').pct;
+  var mer = mergedMerchTotals().pct;
+  var cor = sectionTotals(activeCoordinatorKey()).pct;
+  var parts = [mgr,csh,ass,mer];
+  if(visit.includeCoordInOverall) parts.push(cor);
+  var overall = parts.reduce(function(a,b){return a+b;},0)/parts.length;
+  return {manager:mgr, cashier:csh, assistantMerch:ass, merch:mer, coordinator:cor, overall:overall};
+}
+/* =====================================================================
+   RENDER: visit info
+   ===================================================================== */
+var VISIT_TYPE_OPTIONS = ['KPI','SUPPORT','Administrative'];
+var VISIT_FIELDS = [
+  ['date','تاريخ الزيارة','date'],
+  ['auditor','اسم المراجع (Auditor)','text'], ['manager','مدير الفرع','text'],
+  ['visitType','نوع الزيارة','select:'+VISIT_TYPE_OPTIONS.join(',')]
+];
+function renderVisitGrid(){
+  var host = document.getElementById('visitGrid'); host.innerHTML='';
+  var readOnly = typeof isReadOnly==='function' && isReadOnly();
+
+  // branch dropdown (first field) — populated from the fixed branch list
+  var branchWrap=document.createElement('div'); branchWrap.className='field';
+  var branchLab=document.createElement('label'); branchLab.textContent='اسم الفرع'; branchWrap.appendChild(branchLab);
+  var branchSel=document.createElement('select');
+  var branchList = (typeof RavinAuth!=='undefined' && RavinAuth.BRANCHES) ? RavinAuth.BRANCHES : [];
+  var placeholder=document.createElement('option'); placeholder.value=''; placeholder.textContent='اختر الفرع…'; branchSel.appendChild(placeholder);
+  branchList.forEach(function(code){ var o=document.createElement('option'); o.value=code; o.textContent=code; branchSel.appendChild(o); });
+  branchSel.value = visit.visitInfo.branch||'';
+  branchSel.addEventListener('change', function(){ visit.visitInfo.branch=branchSel.value; persist(); renderDashboard(); });
+  if(readOnly && SESSION && SESSION.branch){ branchSel.value=SESSION.branch; branchSel.disabled=true; }
+  branchWrap.appendChild(branchSel); host.appendChild(branchWrap);
+
+  VISIT_FIELDS.forEach(function(f){
+    var key=f[0], label=f[1], type=f[2];
+    var wrap=document.createElement('div'); wrap.className='field';
+    var lab=document.createElement('label'); lab.textContent=label; wrap.appendChild(lab);
+    var ctrl;
+    if(type.indexOf('select:')===0){
+      ctrl=document.createElement('select');
+      type.slice(7).split(',').forEach(function(opt){ var o=document.createElement('option'); o.value=opt; o.textContent=opt; ctrl.appendChild(o); });
+    } else { ctrl=document.createElement('input'); ctrl.type=type; }
+    ctrl.value = visit.visitInfo[key]||'';
+    ctrl.addEventListener('input', function(){ visit.visitInfo[key]=ctrl.value; persist(); });
+    wrap.appendChild(ctrl);
+    host.appendChild(wrap);
+  });
+  // branch-kind selector
+  var wrap=document.createElement('div'); wrap.className='field';
+  var lab=document.createElement('label'); lab.textContent='نوع الفرع (يحدد تشيك ليست الكوردينيتور)'; wrap.appendChild(lab);
+  var sel=document.createElement('select');
+  [['regular','فرع عادي'],['mega','فرع ميجا']].forEach(function(p){ var o=document.createElement('option'); o.value=p[0]; o.textContent=p[1]; sel.appendChild(o); });
+  sel.value = visit.branchKind;
+  sel.addEventListener('change', function(){ visit.branchKind=sel.value; persist(); renderAll(); });
+  wrap.appendChild(sel); host.appendChild(wrap);
+}
+
+/* =====================================================================
+   RENDER: dashboard cards
+   ===================================================================== */
+function buildScoreCard(c){
+  var el=document.createElement('div'); el.className='score-card'+(c.hero?' hero':'')+(c.errors?' errors':'');
+  var kEl=document.createElement('div'); kEl.className='k'; kEl.textContent=c.k; el.appendChild(kEl);
+  var vEl=document.createElement('div'); vEl.className='v';
+  if(c.raw!=null){ vEl.textContent=c.raw; el.appendChild(vEl); }
+  else {
+    vEl.textContent = Math.round(c.v)+'%'; el.appendChild(vEl);
+    var bar=document.createElement('div'); bar.className='bar';
+    var i=document.createElement('i'); i.style.width=Math.max(0,Math.min(100,c.v))+'%';
+    i.style.background = c.v>=90?'#1E6B3E':(c.v>=70?'#A9720C':'#A3281E');
+    if(c.hero) i.style.background = c.v>=90?'#6FCF97':(c.v>=70?'#F2C94C':'#EB5757');
+    bar.appendChild(i); el.appendChild(bar);
+  }
+  return el;
+}
+function renderDashboard(){
+  var res = finalResultTotals();
+  var findings = allFindings();
+  var totalErrors = findings.length;
+
+  // hero row: overall score (large) + total errors, side by side and centered
+  var heroHost = document.getElementById('dashHeroRow'); heroHost.innerHTML='';
+  heroHost.appendChild(buildScoreCard({k:'النتيجة الإجمالية', v:res.overall, hero:true}));
+  heroHost.appendChild(buildScoreCard({k:'إجمالي الأخطاء', v:null, raw:totalErrors, errors:true}));
+
+  // roles row: each job's score, tidily below the hero row
+  var host = document.getElementById('dashCards'); host.innerHTML='';
+  var cards = [
+    {k:'المدير', v:res.manager},
+    {k:'الكاشير', v:res.cashier},
+    {k:'نائب المرشنديزر', v:res.assistantMerch},
+    {k:'المرشنديزر', v:res.merch},
+    {k:'الكوردينيتور', v:res.coordinator}
+  ];
+  cards.forEach(function(c){ host.appendChild(buildScoreCard(c)); });
+
+  document.getElementById('topbarScore').textContent = Math.round(res.overall)+'%';
+  document.getElementById('dashCount').textContent = findings.length+' ملاحظة مسجّلة';
+}
+
+/* =====================================================================
+   RENDER: accordion sections + items
+   ===================================================================== */
+var SEARCH_TERM='';
+var OPEN_SECTIONS = {};
+
+function renderSections(){
+  var host = document.getElementById('sectionsHost'); host.innerHTML='';
+  visibleSections().forEach(function(secKey){
+    var sec = DATA[secKey];
+    var tot = sectionTotals(secKey);
+    var matches = SEARCH_TERM ? sec.items.some(function(it){return it.name.toLowerCase().indexOf(SEARCH_TERM)>-1;}) : true;
+    if(!matches) return;
+    var acc=document.createElement('div'); acc.className='accordion'+(OPEN_SECTIONS[secKey]?' open':'');
+    var head=document.createElement('button'); head.type='button'; head.className='acc-head';
+    head.innerHTML = '<span class="chev">›</span>'+
+      '<span class="role">'+sec.label+'</span>'+
+      '<span class="meta">'+sec.items.length+' بند</span>'+
+      '<span class="pct">'+Math.round(tot.pct)+'%</span>';
+    head.addEventListener('click', function(){ OPEN_SECTIONS[secKey]=!OPEN_SECTIONS[secKey]; renderSections(); });
+    acc.appendChild(head);
+    var body=document.createElement('div'); body.className='acc-body';
+    sec.items.forEach(function(it,idx){
+      if(SEARCH_TERM && it.name.toLowerCase().indexOf(SEARCH_TERM)===-1) return;
+      body.appendChild(renderItem(secKey, idx, it));
+    });
+    acc.appendChild(body);
+    host.appendChild(acc);
+  });
+}
+
+function renderItem(secKey, idx, it){
+  var id = secKey+'_'+idx;
+  var st = visit.items[id];
+  var wrap=document.createElement('div'); wrap.className='item';
+
+  var top=document.createElement('div'); top.className='item-top';
+  var nameBox=document.createElement('div'); nameBox.className='item-name';
+  nameBox.innerHTML = esc(it.name) + (it.desc?('<div class="item-desc">'+esc(it.desc)+'</div>'):'')+
+    (it.ruleText?('<div class="item-rule">قاعدة الاحتساب: '+esc(it.ruleText)+'</div>'):'');
+  top.appendChild(nameBox);
+
+  var ctrl=document.createElement('div'); ctrl.className='item-ctrl';
+  var badgeScore=document.createElement('span'); badgeScore.className='badge-score';
+  var badgeStatus=document.createElement('span'); badgeStatus.className='badge-status';
+  var fbox = document.createElement('div'); fbox.className='finding-box';
+  fbox.innerHTML = '<div class="warn">ℹ هذا البند لم يحصل على الدرجة الكاملة — تقدر تكتب ملاحظة وترفق صورة (اختياري)</div>';
+
+  // recalculates derived values (score/status/finding visibility) WITHOUT touching
+  // any input element, so typing never loses focus
+  function recalc(){
+    var actual = itemActual(secKey, idx);
+    var status = statusOf(actual, it.full);
+    badgeScore.textContent = actual+' / '+it.full;
+    badgeStatus.textContent = statusLabelAr(status);
+    badgeStatus.className = 'badge-status status-'+status;
+    fbox.classList.toggle('show', status!=='pass');
+  }
+
+  if(it.rule.type==='manual'){
+    var inp=document.createElement('input'); inp.type='number'; inp.min=0; inp.max=it.full; inp.value=st.score;
+    inp.addEventListener('input', function(){ st.score=clamp(inp.value===''?0:inp.value,0,it.full); persist(); recalc(); renderDashboardAndFindings(); });
+    ctrl.appendChild(labelled('الدرجة', inp));
+  } else if(it.rule.type==='threshold' || it.rule.type==='deduction'){
+    var inp2=document.createElement('input'); inp2.type='number'; inp2.min=0; inp2.value=st.count;
+    inp2.addEventListener('input', function(){ st.count=inp2.value===''?0:Math.max(0,parseInt(inp2.value,10)||0); persist(); recalc(); renderDashboardAndFindings(); });
+    ctrl.appendChild(labelled('عدد الأخطاء', inp2));
+  } else if(it.rule.type==='select' || it.rule.type==='binary'){
+    var sel=document.createElement('select');
+    it.rule.options.forEach(function(opt,oi){ var o=document.createElement('option'); o.value=oi; o.textContent=opt.label; sel.appendChild(o); });
+    sel.value = st.optIndex;
+    sel.addEventListener('change', function(){ st.optIndex=parseInt(sel.value,10); persist(); recalc(); renderDashboardAndFindings(); });
+    ctrl.appendChild(labelled('الحالة', sel));
+  }
+  ctrl.appendChild(badgeScore);
+  ctrl.appendChild(badgeStatus);
+  top.appendChild(ctrl);
+  wrap.appendChild(top);
+
+  var grid=document.createElement('div'); grid.className='finding-grid';
+
+  var noteT=document.createElement('textarea'); noteT.placeholder='الملاحظة / الخطأ (Note)'; noteT.value=st.comment||''; noteT.className='full';
+  noteT.addEventListener('input', function(){ st.comment=noteT.value; persist(); renderFindings(); });
+  var noteHolder=document.createElement('div'); noteHolder.className='full'; noteHolder.appendChild(noteT);
+  grid.appendChild(noteHolder);
+
+  fbox.appendChild(grid);
+
+  var evidRow=document.createElement('div'); evidRow.className='evid-row';
+  var fileIn=document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*';
+  var thumbHolder=document.createElement('span');
+
+  function renderThumb(){
+    thumbHolder.innerHTML='';
+    if(!st.evidence) return;
+    var th=document.createElement('img'); th.src=st.evidence; th.className='evid-thumb';
+    th.addEventListener('click', function(){ openEvidModal(st.evidence); });
+    thumbHolder.appendChild(th);
+    var rm=document.createElement('button'); rm.type='button'; rm.className='btn btn-sm btn-ghost'; rm.textContent='إزالة الصورة';
+    rm.addEventListener('click', function(){ st.evidence=null; persist(); renderThumb(); });
+    thumbHolder.appendChild(rm);
+  }
+  fileIn.addEventListener('change', function(){
+    var f=fileIn.files[0]; if(!f) return;
+    var reader=new FileReader();
+    reader.onload=function(e){ st.evidence=e.target.result; persist(); renderThumb(); };
+    reader.readAsDataURL(f);
+  });
+  evidRow.appendChild(fileIn);
+  evidRow.appendChild(thumbHolder);
+  renderThumb();
+  fbox.appendChild(evidRow);
+  wrap.appendChild(fbox);
+  recalc();
+  return wrap;
+}
+function labelled(label, ctrl){
+  var box=document.createElement('div'); box.style.display='flex'; box.style.flexDirection='column'; box.style.gap='2px';
+  var l=document.createElement('span'); l.style.fontSize='10px'; l.style.color='var(--ink-faint)'; l.textContent=label;
+  box.appendChild(l); box.appendChild(ctrl); return box;
+}
+function esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+
+function openEvidModal(src){ document.getElementById('evidModalImg').src=src; document.getElementById('evidModalBg').classList.add('show'); }
+document.getElementById('evidModalClose').addEventListener('click', function(){ document.getElementById('evidModalBg').classList.remove('show'); });
+document.getElementById('evidModalBg').addEventListener('click', function(e){ if(e.target.id==='evidModalBg') e.currentTarget.classList.remove('show'); });
+
+/* =====================================================================
+   FINDINGS
+   ===================================================================== */
+function allFindings(){
+  var list=[];
+  visibleSections().forEach(function(secKey){
+    DATA[secKey].items.forEach(function(it,idx){
+      var actual = itemActual(secKey,idx);
+      var status = statusOf(actual, it.full);
+      if(status==='pass') return;
+      var id=secKey+'_'+idx, st=visit.items[id];
+      list.push({ section:DATA[secKey].label, item:it.name, impact:(it.full-actual)+' / '+it.full,
+        comment:st.comment, evidence:st.evidence });
+    });
+  });
+  return list;
+}
+function renderFindings(){
+  var list = allFindings();
+  var body=document.getElementById('findingsBody'); body.innerHTML='';
+  document.getElementById('findCount').textContent = list.length+' بند';
+  if(!list.length){ body.innerHTML='<tr><td colspan="5" class="empty">لا توجد أخطاء مسجّلة</td></tr>'; }
+  list.forEach(function(f){
+    var tr=document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(f.section)+'</td><td>'+esc(f.item)+'</td><td>'+esc(f.comment||'—')+'</td>'+
+      '<td>'+esc(f.impact)+'</td>'+
+      '<td>'+(f.evidence? '<img src="'+f.evidence+'" class="evid-thumb" style="cursor:pointer;" onclick="openEvidModal(this.src)">' : '—')+'</td>';
+    body.appendChild(tr);
+  });
+  renderMainFindingsBox(list);
+}
+function renderMainFindingsBox(list){
+  var box=document.getElementById('mainFindingsBox');
+  var top = list.slice(0,8);
+  if(!top.length){ box.innerHTML='<div class="empty">لا توجد ملاحظات مسجّلة بعد</div>'; return; }
+  box.innerHTML='';
+  var ul=document.createElement('ul'); ul.style.margin='0'; ul.style.paddingInlineStart='18px';
+  top.forEach(function(f){
+    var li=document.createElement('li'); li.style.marginBottom='6px'; li.style.fontSize='13px';
+    li.innerHTML='<strong>'+esc(f.section)+' — '+esc(f.item)+'</strong>: '+esc(f.comment||'بدون تفاصيل');
+    ul.appendChild(li);
+  });
+  box.appendChild(ul);
+}
+
+/* =====================================================================
+   INVENTORY / STOCK AUDIT — v3
+   Long format, one row per Code+Size:
+   {code, dep, price, size, sys, warehouse, display, actualManual}
+   - warehouse/display/actualManual are null until explicitly typed (0 counts as entered).
+   - Actual Qty = warehouse+display (auto, read-only) once either is entered;
+     otherwise the auditor can type Actual Qty directly (actualManual).
+   - Balance Status is computed per CODE (grouping all its sizes) and shown
+     on every row of that code: BALANCED / SIZE RECONCILIATION / SHORTAGE / EXCESS / NOT COUNTED.
+   - NO allowance / tolerance / percentage anywhere. PIECES and VALUE only.
+   ===================================================================== */
+var INV_BALANCE_FILTER = 'all';
+var INV_COUNTING_FILTER = 'all';
+var INV_DEPT_FILTER = 'all';
+var INV_SIZE_FILTER = 'all';
+var INV_SEARCH = '';
+var invSearchTimer = null;
+var CODE_INDEX = {}; // code -> [row,...], rebuilt whenever visit.inventory.rows structure changes
+var CODE_ROW_DOM = {}; // code -> [{tr, badgeEl}] for currently-rendered rows (for live sibling badge updates)
+var INV_FOCUS_ORDER = []; // [{row, whInput, dispInput, actualInput}] in current DOM render order
+
+function rebuildCodeIndex(){
+  CODE_INDEX = {};
+  visit.inventory.rows.forEach(function(row){
+    (CODE_INDEX[row.code] = CODE_INDEX[row.code] || []).push(row);
+  });
+}
+
+function rowActualDisabled(row){ return row.warehouse!=null || row.display!=null; }
+function rowCounted(row){ return rowActualDisabled(row) ? true : row.actualManual!=null; }
+function rowActualQty(row){
+  if(rowActualDisabled(row)) return (Number(row.warehouse)||0) + (Number(row.display)||0);
+  return row.actualManual==null ? null : Number(row.actualManual);
+}
+function rowDiff(row){ var a=rowActualQty(row); return a==null ? null : (a - (Number(row.sys)||0)); }
+function rowValue(row){ var d=rowDiff(row); return d==null ? null : d*(Number(row.price)||0); }
+
+// ---- code-level aggregate & balance status --------------------------
+function codeAggregate(code){
+  var rows = CODE_INDEX[code] || [];
+  var sysTotal=0, actualTotal=0, allCounted=true, allSizesMatch=true;
+  rows.forEach(function(r){
+    sysTotal += Number(r.sys)||0;
+    if(!rowCounted(r)){ allCounted=false; }
+    else {
+      actualTotal += rowActualQty(r);
+      if(rowDiff(r)!==0) allSizesMatch=false;
+    }
+  });
+  var status;
+  if(!allCounted) status='not_counted';
+  else {
+    var codeDiff = actualTotal - sysTotal;
+    if(codeDiff===0) status = allSizesMatch ? 'balanced' : 'size_reconciliation';
+    else status = codeDiff<0 ? 'shortage' : 'excess';
+  }
+  return { sysTotal:sysTotal, actualTotal: allCounted?actualTotal:null, diff: allCounted?(actualTotal-sysTotal):null,
+    allCounted:allCounted, status:status, dep: rows.length?rows[0].dep:'' };
+}
+
+var BAL_LABEL = {balanced:'BALANCED', size_reconciliation:'SIZE RECONCILIATION', shortage:'SHORTAGE', excess:'EXCESS', not_counted:'NOT COUNTED'};
+
+function fmtSigned(n, suffix){
+  n = Math.round(n*100)/100;
+  var s = (n>0?'+':'') + n.toLocaleString('en-US');
+  return s + (suffix||'');
+}
+
+// ---- filtering: a ROW passes if its own fields match + its CODE's balance status matches
+function rowPassesFilters(row){
+  if(INV_DEPT_FILTER!=='all' && row.dep!==INV_DEPT_FILTER) return false;
+  if(INV_SIZE_FILTER!=='all' && row.size!==INV_SIZE_FILTER) return false;
+  if(INV_COUNTING_FILTER!=='all'){
+    var c = rowCounted(row);
+    if(INV_COUNTING_FILTER==='counted' && !c) return false;
+    if(INV_COUNTING_FILTER==='not_counted' && c) return false;
+  }
+  if(INV_BALANCE_FILTER!=='all'){
+    if(codeAggregate(row.code).status!==INV_BALANCE_FILTER) return false;
+  }
+  if(INV_SEARCH){
+    var hay = (String(row.code)+' '+String(row.dep)+' '+String(row.size)).toLowerCase();
+    if(hay.indexOf(INV_SEARCH)===-1) return false;
+  }
+  return true;
+}
+function filteredRows(){ return visit.inventory.rows.filter(rowPassesFilters); }
+
+// ---- dashboard aggregate from FILTERED data only ----------------------
+function invDashboardAggregate(){
+  var rows = filteredRows();
+  var sysTotal=0, actualTotal=0, countedItems=0, notCounted=0, diffValue=0;
+  var codesSeen = {};
+  rows.forEach(function(row){
+    sysTotal += Number(row.sys)||0;
+    if(rowCounted(row)){ countedItems++; actualTotal += rowActualQty(row); diffValue += rowValue(row); }
+    else notCounted++;
+    codesSeen[row.code]=true;
+  });
+  var balancedCodes=0, sizeReconCodes=0, shortageCodes=0, excessCodes=0, shortageQty=0, excessQty=0, netDiff=0;
+  Object.keys(codesSeen).forEach(function(code){
+    var agg = codeAggregate(code);
+    if(agg.status==='balanced') balancedCodes++;
+    else if(agg.status==='size_reconciliation') sizeReconCodes++;
+    else if(agg.status==='shortage'){ shortageCodes++; shortageQty += Math.abs(agg.diff); netDiff += agg.diff; }
+    else if(agg.status==='excess'){ excessCodes++; excessQty += agg.diff; netDiff += agg.diff; }
+  });
+  return { totalRows:rows.length, sysTotal:sysTotal, actualTotal:actualTotal, countedItems:countedItems, notCounted:notCounted,
+    diffValue:diffValue, balancedCodes:balancedCodes, sizeReconCodes:sizeReconCodes, shortageCodes:shortageCodes,
+    excessCodes:excessCodes, shortageQty:shortageQty, excessQty:excessQty, netDiff:netDiff, uniqueCodes:Object.keys(codesSeen).length };
+}
+
+function currentFilterLabel(){
+  var parts=[];
+  if(INV_DEPT_FILTER!=='all') parts.push('Department: '+INV_DEPT_FILTER);
+  if(INV_SIZE_FILTER!=='all') parts.push('Size: '+INV_SIZE_FILTER);
+  if(INV_BALANCE_FILTER!=='all') parts.push('Balance Status: '+BAL_LABEL[INV_BALANCE_FILTER]);
+  if(INV_COUNTING_FILTER!=='all') parts.push('Counting: '+(INV_COUNTING_FILTER==='counted'?'COUNTED':'NOT COUNTED'));
+  if(INV_SEARCH) parts.push('Search: "'+INV_SEARCH+'"');
+  return parts.length? parts.join(' | ') : 'All Items';
+}
+
+function renderInvSummary(){
+  var a = invDashboardAggregate();
+  document.getElementById('invCurrentFilter').textContent = currentFilterLabel();
+
+  var totalSkus = visit.inventory.rows.length;
+  var totalCountedAll = visit.inventory.rows.filter(rowCounted).length;
+  var pct = totalSkus? (totalCountedAll/totalSkus*100) : 0;
+  document.getElementById('invProgressLabel').textContent = totalCountedAll.toLocaleString('en-US')+' / '+totalSkus.toLocaleString('en-US')+' — '+Math.round(pct)+'%';
+  document.getElementById('invProgressBar').style.width = pct+'%';
+
+  var cards = [
+    {k:'SYSTEM QTY', v:a.sysTotal},
+    {k:'ACTUAL QTY', v:a.actualTotal},
+    {k:'SHORTAGE PCS', v:'-'+a.shortageQty, color:'var(--fail)', balance:'shortage'},
+    {k:'EXCESS PCS', v:'+'+a.excessQty, color:'var(--partial)', balance:'excess'},
+    {k:'NET DIFFERENCE', v:fmtSigned(a.netDiff), hero:true, color:a.netDiff<0?'#EB5757':(a.netDiff>0?'#F2C94C':'#6FCF97')},
+    {k:'DIFFERENCE VALUE (EGP)', v:fmtSigned(a.diffValue), hero:true, color:a.diffValue<0?'#EB5757':(a.diffValue>0?'#F2C94C':'#6FCF97')},
+    {k:'COUNTED ITEMS', v:a.countedItems, counting:'counted'},
+    {k:'NOT COUNTED', v:a.notCounted, counting:'not_counted'},
+    {k:'BALANCED CODES', v:a.balancedCodes, balance:'balanced', color:'var(--pass)'},
+    {k:'SIZE RECONCILIATION', v:a.sizeReconCodes, balance:'size_reconciliation', color:'#1F4E8C'}
+  ];
+  var host=document.getElementById('invSummaryCards'); host.innerHTML='';
+  cards.forEach(function(c){
+    var el=document.createElement('div'); el.className='score-card'+(c.hero?' hero':'');
+    if(c.balance || c.counting){
+      el.style.cursor='pointer';
+      el.addEventListener('click', function(){
+        if(c.balance) setInvBalanceFilter(c.balance);
+        if(c.counting) setInvCountingFilter(c.counting);
+        document.getElementById('invTable').scrollIntoView({behavior:'smooth', block:'start'});
+      });
+    }
+    var kEl=document.createElement('div'); kEl.className='k'; kEl.textContent=c.k; el.appendChild(kEl);
+    var vEl=document.createElement('div'); vEl.className='v'; vEl.textContent = (typeof c.v==='number'? c.v.toLocaleString('en-US') : c.v);
+    if(c.color) vEl.style.color=c.color;
+    el.appendChild(vEl);
+    host.appendChild(el);
+  });
+}
+
+function setInvBalanceFilter(f){
+  INV_BALANCE_FILTER=f;
+  document.querySelectorAll('[data-inv-balance]').forEach(function(c){ c.classList.toggle('active', c.dataset.invBalance===f); });
+  renderInvTable(); renderInvSummary(); renderCodeSummary();
+}
+function setInvCountingFilter(f){
+  INV_COUNTING_FILTER=f;
+  document.querySelectorAll('[data-inv-counting]').forEach(function(c){ c.classList.toggle('active', c.dataset.invCounting===f); });
+  renderInvTable(); renderInvSummary(); renderCodeSummary();
+}
+document.querySelectorAll('[data-inv-balance]').forEach(function(chip){ chip.addEventListener('click', function(){ setInvBalanceFilter(chip.dataset.invBalance); }); });
+document.querySelectorAll('[data-inv-counting]').forEach(function(chip){ chip.addEventListener('click', function(){ setInvCountingFilter(chip.dataset.invCounting); }); });
+document.getElementById('invDeptFilter').addEventListener('change', function(e){ INV_DEPT_FILTER=e.target.value; renderInvTable(); renderInvSummary(); renderCodeSummary(); });
+document.getElementById('invSizeFilter').addEventListener('change', function(e){ INV_SIZE_FILTER=e.target.value; renderInvTable(); renderInvSummary(); renderCodeSummary(); });
+document.getElementById('invSearch').addEventListener('input', function(e){
+  var val=e.target.value;
+  clearTimeout(invSearchTimer);
+  invSearchTimer=setTimeout(function(){ INV_SEARCH=val.trim().toLowerCase(); renderInvTable(); renderInvSummary(); renderCodeSummary(); }, 220);
+});
+document.getElementById('invClearFilters').addEventListener('click', function(){
+  INV_BALANCE_FILTER='all'; INV_COUNTING_FILTER='all'; INV_DEPT_FILTER='all'; INV_SIZE_FILTER='all'; INV_SEARCH='';
+  document.querySelectorAll('[data-inv-balance]').forEach(function(c){ c.classList.toggle('active', c.dataset.invBalance==='all'); });
+  document.querySelectorAll('[data-inv-counting]').forEach(function(c){ c.classList.toggle('active', c.dataset.invCounting==='all'); });
+  document.getElementById('invDeptFilter').value='all';
+  document.getElementById('invSizeFilter').value='all';
+  document.getElementById('invSearch').value='';
+  renderInvTable(); renderInvSummary(); renderCodeSummary();
+});
+
+function populateDeptAndSizeFilters(){
+  var deptSel=document.getElementById('invDeptFilter'), sizeSel=document.getElementById('invSizeFilter');
+  var curD=deptSel.value||'all', curS=sizeSel.value||'all';
+  var depts=[], sizes=[];
+  visit.inventory.rows.forEach(function(r){
+    if(r.dep && depts.indexOf(r.dep)===-1) depts.push(r.dep);
+    if(r.size && sizes.indexOf(r.size)===-1) sizes.push(r.size);
+  });
+  depts.sort(); sizes.sort();
+  deptSel.innerHTML='<option value="all">All Departments</option>'+depts.map(function(d){return '<option value="'+esc(d)+'">'+esc(d)+'</option>';}).join('');
+  sizeSel.innerHTML='<option value="all">All Sizes</option>'+sizes.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('');
+  deptSel.value = depts.indexOf(curD)>-1 ? curD : 'all'; INV_DEPT_FILTER=deptSel.value;
+  sizeSel.value = sizes.indexOf(curS)>-1 ? curS : 'all'; INV_SIZE_FILTER=sizeSel.value;
+}
+
+var INV_MAX_RENDER = 1200;
+
+function renderInvTable(){
+  var body=document.getElementById('invBody'); body.innerHTML='';
+  CODE_ROW_DOM = {}; INV_FOCUS_ORDER = [];
+  var rows = filteredRows();
+  if(!rows.length){
+    var tr=document.createElement('tr'); var td=document.createElement('td'); td.colSpan=11; td.className='empty';
+    td.textContent = visit.inventory.rows.length? 'لا توجد أصناف مطابقة لهذا الفلتر' : 'لا يوجد ملف استوك مرفوع بعد — اضغط UPLOAD STOCK FILE';
+    tr.appendChild(td); body.appendChild(tr); return;
+  }
+  var frag=document.createDocumentFragment();
+  var renderRows = rows.slice(0, INV_MAX_RENDER);
+  renderRows.forEach(function(row){ frag.appendChild(buildInvRow(row)); });
+  body.appendChild(frag);
+  if(rows.length>INV_MAX_RENDER){
+    var trMore=document.createElement('tr'); var tdMore=document.createElement('td'); tdMore.colSpan=11; tdMore.className='empty';
+    tdMore.textContent='+ '+(rows.length-INV_MAX_RENDER).toLocaleString('en-US')+' صنف إضافي — استخدم البحث أو الفلاتر لتضييق النتائج';
+    trMore.appendChild(tdMore); body.appendChild(trMore);
+  }
+}
+
+function clampNonNegInt(raw){
+  if(raw==='') return null;
+  var n = Math.max(0, Math.floor(Number(raw)||0));
+  return n;
+}
+
+function buildInvRow(row){
+  var tr=document.createElement('tr');
+  var tdCode=document.createElement('td'); tdCode.textContent=row.code; tdCode.style.fontFamily='var(--mono)'; tr.appendChild(tdCode);
+  var tdDep=document.createElement('td'); tdDep.textContent=row.dep||'—'; tr.appendChild(tdDep);
+  var tdPrice=document.createElement('td'); tdPrice.textContent=(Number(row.price)||0).toLocaleString('en-US'); tr.appendChild(tdPrice);
+  var tdSize=document.createElement('td'); tdSize.textContent=row.size||'—'; tr.appendChild(tdSize);
+  var tdSys=document.createElement('td'); tdSys.textContent=Number(row.sys)||0; tdSys.style.fontFamily='var(--mono)'; tr.appendChild(tdSys);
+
+  var tdWh=document.createElement('td');
+  var inpWh=document.createElement('input'); inpWh.type='number'; inpWh.min='0'; inpWh.step='1'; inpWh.className='inv-input-strong';
+  inpWh.placeholder='—'; inpWh.value = row.warehouse==null? '' : row.warehouse;
+  tdWh.appendChild(inpWh); tr.appendChild(tdWh);
+
+  var tdDisp=document.createElement('td');
+  var inpDisp=document.createElement('input'); inpDisp.type='number'; inpDisp.min='0'; inpDisp.step='1'; inpDisp.className='inv-input-strong';
+  inpDisp.placeholder='—'; inpDisp.value = row.display==null? '' : row.display;
+  tdDisp.appendChild(inpDisp); tr.appendChild(tdDisp);
+
+  var tdActual=document.createElement('td');
+  var inpActual=document.createElement('input'); inpActual.type='number'; inpActual.min='0'; inpActual.step='1'; inpActual.className='inv-input-strong';
+  inpActual.placeholder='—';
+  tdActual.appendChild(inpActual); tr.appendChild(tdActual);
+
+  var tdDiff=document.createElement('td'); tdDiff.style.fontFamily='var(--mono)'; tdDiff.style.fontWeight='700';
+  var tdVal=document.createElement('td'); tdVal.style.fontFamily='var(--mono)'; tdVal.style.fontWeight='700';
+  var tdBal=document.createElement('td');
+  var balBadge=document.createElement('span'); balBadge.className='bal-badge'; tdBal.appendChild(balBadge);
+  tr.appendChild(tdDiff); tr.appendChild(tdVal); tr.appendChild(tdBal);
+
+  function refreshActualField(){
+    var disabled = rowActualDisabled(row);
+    inpActual.disabled = disabled;
+    inpActual.value = disabled ? rowActualQty(row) : (row.actualManual==null? '' : row.actualManual);
+  }
+  function refreshCalc(){
+    var d=rowDiff(row), v=rowValue(row);
+    tdDiff.textContent = d==null? '—' : fmtSigned(d);
+    tdDiff.style.color = d==null? 'var(--ink-faint)' : (d<0?'var(--fail)':(d>0?'var(--partial)':'var(--pass)'));
+    tdVal.textContent = v==null? '—' : fmtSigned(v);
+    tdVal.style.color = v==null? 'var(--ink-faint)' : (v<0?'var(--fail)':(v>0?'var(--partial)':'var(--pass)'));
+  }
+  function refreshBadgeForCode(){
+    var agg = codeAggregate(row.code);
+    (CODE_ROW_DOM[row.code]||[]).forEach(function(ref){
+      ref.badgeEl.textContent = BAL_LABEL[agg.status];
+      ref.badgeEl.className = 'bal-badge bal-'+agg.status;
+    });
+  }
+
+  inpWh.addEventListener('input', function(){ row.warehouse=clampNonNegInt(inpWh.value); if(inpWh.value!=='' && row.warehouse!=null) inpWh.value=row.warehouse; persist(); refreshActualField(); refreshCalc(); refreshBadgeForCode(); renderInvSummary(); });
+  inpDisp.addEventListener('input', function(){ row.display=clampNonNegInt(inpDisp.value); if(inpDisp.value!=='' && row.display!=null) inpDisp.value=row.display; persist(); refreshActualField(); refreshCalc(); refreshBadgeForCode(); renderInvSummary(); });
+  inpActual.addEventListener('input', function(){ if(inpActual.disabled) return; row.actualManual=clampNonNegInt(inpActual.value); if(inpActual.value!=='' && row.actualManual!=null) inpActual.value=row.actualManual; persist(); refreshCalc(); refreshBadgeForCode(); renderInvSummary(); });
+
+  [inpWh, inpDisp, inpActual].forEach(function(inp, colIdx){
+    var colName = ['wh','disp','actual'][colIdx];
+    inp.addEventListener('keydown', function(ev){
+      if(ev.key==='Enter' || ev.key==='ArrowDown'){ ev.preventDefault(); focusNextInv(colName, 1); }
+      else if(ev.key==='ArrowUp'){ ev.preventDefault(); focusNextInv(colName, -1); }
+    });
+  });
+
+  refreshActualField();
+  refreshCalc();
+  var agg0 = codeAggregate(row.code);
+  balBadge.textContent = BAL_LABEL[agg0.status]; balBadge.className='bal-badge bal-'+agg0.status;
+
+  (CODE_ROW_DOM[row.code] = CODE_ROW_DOM[row.code] || []).push({tr:tr, badgeEl:balBadge});
+  INV_FOCUS_ORDER.push({row:row, wh:inpWh, disp:inpDisp, actual:inpActual});
+  return tr;
+}
+
+function focusNextInv(colName, dir){
+  var curEl = document.activeElement;
+  var idx = INV_FOCUS_ORDER.findIndex(function(r){ return r.wh===curEl || r.disp===curEl || r.actual===curEl; });
+  if(idx===-1) return;
+  var n = INV_FOCUS_ORDER.length;
+  var i = idx + dir;
+  function tryFocus(i){
+    if(i<0 || i>=n) return false;
+    var target = INV_FOCUS_ORDER[i][colName];
+    if(target && !target.disabled){ target.focus(); target.select&&target.select(); return true; }
+    return false;
+  }
+  if(tryFocus(i)) return;
+  // reached an edge (or disabled target) — on Enter/Down past the last row, jump to first NOT COUNTED row
+  if(dir===1){
+    for(var k=0;k<n;k++){
+      if(!rowCounted(INV_FOCUS_ORDER[k].row)){
+        var t=INV_FOCUS_ORDER[k][colName];
+        if(t && !t.disabled){ t.focus(); t.select&&t.select(); return; }
+      }
+    }
+  }
+  // fallback: scan forward/backward for the next enabled cell in that column
+  var step = dir>0?1:-1, j=i+step, guard=0;
+  while(j>=0 && j<n && guard<n){ if(tryFocus(j)) return; j+=step; guard++; }
+}
+
+function renderCodeSummary(){
+  var body=document.getElementById('codeSummaryBody'); body.innerHTML='';
+  var codes = Object.keys(CODE_INDEX).filter(function(code){
+    var rows = CODE_INDEX[code];
+    if(INV_DEPT_FILTER!=='all' && !rows.some(function(r){return r.dep===INV_DEPT_FILTER;})) return false;
+    if(INV_BALANCE_FILTER!=='all' && codeAggregate(code).status!==INV_BALANCE_FILTER) return false;
+    if(INV_SEARCH && String(code).toLowerCase().indexOf(INV_SEARCH)===-1 && !rows.some(function(r){return String(r.dep).toLowerCase().indexOf(INV_SEARCH)>-1;})) return false;
+    return true;
+  }).sort();
+  document.getElementById('codeSummaryCount').textContent = codes.length.toLocaleString('en-US')+' كود';
+  if(!codes.length){ body.innerHTML='<tr><td colspan="6" class="empty">لا توجد أكواد مطابقة</td></tr>'; return; }
+  var frag=document.createDocumentFragment();
+  codes.slice(0, INV_MAX_RENDER).forEach(function(code){
+    var agg = codeAggregate(code);
+    var tr=document.createElement('tr'); tr.className='inv-code-row';
+    tr.innerHTML = '<td style="font-family:var(--mono);">'+esc(code)+'</td><td>'+esc(agg.dep||'—')+'</td>'+
+      '<td style="font-family:var(--mono);">'+agg.sysTotal+'</td>'+
+      '<td style="font-family:var(--mono);">'+(agg.actualTotal==null?'—':agg.actualTotal)+'</td>'+
+      '<td style="font-family:var(--mono);">'+(agg.diff==null?'—':fmtSigned(agg.diff))+'</td>'+
+      '<td><span class="bal-badge bal-'+agg.status+'">'+BAL_LABEL[agg.status]+'</span></td>';
+    tr.addEventListener('click', function(){
+      document.getElementById('invSearch').value = code;
+      INV_SEARCH = String(code).toLowerCase();
+      renderInvTable();
+      document.getElementById('invTable').scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    frag.appendChild(tr);
+  });
+  body.appendChild(frag);
+  if(codes.length>INV_MAX_RENDER){
+    var tr2=document.createElement('tr'); var td2=document.createElement('td'); td2.colSpan=6; td2.className='empty';
+    td2.textContent='+ '+(codes.length-INV_MAX_RENDER).toLocaleString('en-US')+' كود إضافي — ضيّق البحث لعرضه';
+    tr2.appendChild(td2); body.appendChild(tr2);
+  }
+}
+
+function renderInvFinal(){
+  var allRows = visit.inventory.rows;
+  var sysTotal=0, actualTotal=0, shortageQty=0, excessQty=0, netDiff=0, diffValue=0;
+  var totalSkus = allRows.length, countedAll = allRows.filter(rowCounted).length;
+  var codes = Object.keys(CODE_INDEX);
+  codes.forEach(function(code){
+    var agg = codeAggregate(code);
+    sysTotal += agg.sysTotal;
+    if(agg.allCounted){
+      actualTotal += agg.actualTotal;
+      if(agg.status==='shortage') shortageQty += Math.abs(agg.diff);
+      else if(agg.status==='excess') excessQty += agg.diff;
+      netDiff += agg.diff;
+    }
+  });
+  allRows.forEach(function(r){ if(rowCounted(r)) diffValue += rowValue(r); });
+
+  document.getElementById('invFinalNet').textContent = fmtSigned(netDiff)+' PCS';
+  document.getElementById('invFinalNet').style.color = netDiff<0?'#EB5757':(netDiff>0?'#F2C94C':'#6FCF97');
+  var completed = totalSkus>0 && countedAll===totalSkus;
+  var tagEl=document.getElementById('invFinalTag');
+  tagEl.textContent = totalSkus===0 ? 'NO STOCK FILE UPLOADED' : (completed? 'COUNT COMPLETED' : 'COUNTING IN PROGRESS');
+  tagEl.style.background = completed? '#1E6B3E' : '#A9720C'; tagEl.style.color='#fff';
+  document.getElementById('ifSystem').textContent = sysTotal.toLocaleString('en-US');
+  document.getElementById('ifActual').textContent = actualTotal.toLocaleString('en-US');
+  document.getElementById('ifShortage').textContent = '-'+shortageQty.toLocaleString('en-US');
+  document.getElementById('ifExcess').textContent = '+'+excessQty.toLocaleString('en-US');
+  document.getElementById('ifValue').textContent = fmtSigned(diffValue);
+}
+
+function renderInventory(){
+  rebuildCodeIndex();
+  populateDeptAndSizeFilters();
+  renderInvSummary();
+  renderInvTable();
+  renderCodeSummary();
+  renderInvFinal();
+}
+
+document.getElementById('clearInvRows').addEventListener('click', function(){
+  if(!visit.inventory.rows.length) return;
+  if(!confirm('سيتم تفريغ كل بيانات الجرد الحالية (الملف المرفوع والجرد الفعلي المُدخل). متابعة؟')) return;
+  visit.inventory.rows=[]; persist(); renderInventory();
+  document.getElementById('stockUploadStatus').textContent='';
+});
+
+document.getElementById('saveCountBtn').addEventListener('click', function(){
+  persist(); showToast('تم حفظ بيانات الجرد');
+});
+
+/* ---- STOCK sheet upload, validation & parsing ------------------------ */
+var REQUIRED_STOCK_COLS = [
+  {label:'Code', patterns:['code','كود','cod']},
+  {label:'Department', patterns:['dep','debt','قسم','ديبارت']},
+  {label:'Price', patterns:['price','سعر']},
+  {label:'Size', patterns:['size','مقاس']},
+  {label:'System Qty', patterns:['quantity','qty','system','كمي','الكمية']}
+];
+function guessKey(headerKeys, patterns){
+  for(var i=0;i<headerKeys.length;i++){
+    var k=headerKeys[i], low=String(k).toLowerCase();
+    for(var j=0;j<patterns.length;j++){ if(low.indexOf(patterns[j])>-1) return k; }
+  }
+  return null;
+}
+function showStockValidation(missing){
+  var box=document.getElementById('stockValidationBox'), msg=document.getElementById('stockValidationMsg');
+  if(!missing.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  msg.innerHTML = 'Missing Column'+(missing.length>1?'s':'')+': <strong>'+missing.map(esc).join(', ')+'</strong><br>تأكد إن الملف فيه الأعمدة المطلوبة (Code, Department, Price, Size, System Qty) ثم أعد الرفع.';
+}
+function handleStockUpload(file){
+  var statusEl=document.getElementById('stockUploadStatus');
+  statusEl.textContent='جاري القراءة...';
+  showStockValidation([]);
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array'});
+      var sheetName = wb.SheetNames.find(function(n){return /stock|quant|استوك|جرد/i.test(n);}) || wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+      var json = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!json.length){ statusEl.textContent=''; showStockValidation(['(الملف فارغ)']); return; }
+      var headerKeys = Object.keys(json[0]);
+
+      var resolved = {}, missing = [];
+      REQUIRED_STOCK_COLS.forEach(function(col){
+        var k = guessKey(headerKeys, col.patterns);
+        if(k) resolved[col.label]=k; else missing.push(col.label);
+      });
+      if(missing.length){ statusEl.textContent=''; showStockValidation(missing); return; }
+
+      var rows = json.map(function(r){
+        return {
+          code: String(r[resolved.Code]||'').trim(),
+          dep: String(r[resolved.Department]||'').trim(),
+          price: Number(r[resolved.Price])||0,
+          size: String(r[resolved.Size]||'').trim(),
+          sys: Number(r[resolved['System Qty']])||0,
+          warehouse: null, display: null, actualManual: null
+        };
+      }).filter(function(r){ return r.code; });
+
+      if(!rows.length){ statusEl.textContent=''; showStockValidation(['(لا توجد صفوف بيانات صحيحة)']); return; }
+
+      if(visit.inventory.rows.length && !confirm('سيتم استبدال شيت الجرد الحالي بـ '+rows.length.toLocaleString('en-US')+' صنف من الملف المرفوع. متابعة؟')){ statusEl.textContent=''; return; }
+
+      visit.inventory.rows = rows;
+      persist(); renderInventory();
+      statusEl.textContent = 'تم استيراد '+rows.length.toLocaleString('en-US')+' صنف من شيت "'+sheetName+'"';
+      showToast('تم بناء شيت الجرد من ملف الاستوك');
+    }catch(err){
+      statusEl.textContent='';
+      showStockValidation(['(تعذّرت قراءة الملف — تأكد أنه Excel أو CSV صحيح)']);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+document.getElementById('stockUpload').addEventListener('change', function(e){
+  var f=e.target.files[0]; if(f) handleStockUpload(f);
+  e.target.value='';
+});
+
+document.getElementById('exportInvBtn').addEventListener('click', function(){
+  var rows = [['Code','Department','Price','Size','System Qty','Warehouse','Display','Actual Qty','Difference Qty','Difference Value','Balance Status']];
+  visit.inventory.rows.forEach(function(row){
+    var d=rowDiff(row), v=rowValue(row), agg=codeAggregate(row.code);
+    rows.push([row.code, row.dep, row.price, row.size, row.sys,
+      row.warehouse==null?'':row.warehouse, row.display==null?'':row.display,
+      rowCounted(row)? rowActualQty(row) : '', d==null?'':d, v==null?'':v, BAL_LABEL[agg.status]]);
+  });
+  var csv = rows.map(function(r){ return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(','); }).join('\r\n');
+  var blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='RAVIN_Inventory_Result_'+(visit.visitInfo.branch||'branch')+'_'+(visit.visitInfo.date||'')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showToast('تم تصدير نتيجة الجرد');
+});
+
+/* =====================================================================
+   MAP CHECK — فحص اللوكيشن
+   The MAP LOC sheet (Code, Location) is the single source of truth for
+   where each code SHOULD be, and is stored per BRANCH (not per visit) —
+   like maintenance notes — so it is uploaded once and reused on every
+   future visit to that branch. The auditor picks the location they are
+   physically standing in, then types/scans the codes they find there:
+   each one is looked up in the branch's map and compared to the selected
+   location — a match is CORRECT, a mismatch is WRONG (misplaced, and the
+   correct location is shown), and a code missing from the map entirely is
+   UNKNOWN. The auditor can switch locations freely and keep checking;
+   "تم الانتهاء" exports a full Excel report of everything checked so far.
+   ===================================================================== */
+var MAPCHECK_KEY = 'ravin_qc_mapcheck_v1';
+function loadMapStore(){ try{ return JSON.parse(localStorage.getItem(MAPCHECK_KEY))||{}; }catch(e){ return {}; } }
+function saveMapStore(store){ try{ localStorage.setItem(MAPCHECK_KEY, JSON.stringify(store)); }catch(e){} }
+function mcDataFor(branch){
+  var store = loadMapStore();
+  var d = store[branch];
+  if(!d) d = { rows: [], log: [], mapImage: null };
+  if(!d.rows) d.rows = [];
+  if(!d.log) d.log = [];
+  if(d.mapImage===undefined) d.mapImage = null;
+  return d;
+}
+function mcSaveFor(branch, data){ var store=loadMapStore(); store[branch]=data; saveMapStore(store); }
+
+function mcNorm(s){ return String(s==null?'':s).trim().toUpperCase(); }
+
+function mcLocations(branch){
+  var data = mcDataFor(branch), seen=[], out=[];
+  data.rows.forEach(function(r){ if(r.location && seen.indexOf(r.location)===-1){ seen.push(r.location); out.push(r.location); } });
+  return out;
+}
+function mcRowsForLocation(branch, loc){ return mcDataFor(branch).rows.filter(function(r){ return r.location===loc; }); }
+function mcLocationStats(branch, loc){
+  var rows = mcRowsForLocation(branch, loc);
+  var correct = rows.filter(function(r){ return r.scanResult==='CORRECT'; }).length;
+  return { total: rows.length, correct: correct, remaining: rows.length-correct };
+}
+// Find a row by its code (case/space-insensitive). Returns the row object or null.
+function mcFindRowByCode(branch, code){
+  var n = mcNorm(code);
+  var data = mcDataFor(branch);
+  for(var i=0;i<data.rows.length;i++){ if(mcNorm(data.rows[i].code)===n) return data.rows[i]; }
+  return null;
+}
+
+var MC_REQUIRED_COLS = [
+  {label:'Code', patterns:['code','كود']},
+  {label:'Location', patterns:['location','لوكيشن','موقع']}
+];
+function mcShowValidation(missing){
+  var box=document.getElementById('mcValidationBox'), msg=document.getElementById('mcValidationMsg');
+  if(!missing.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  msg.innerHTML = 'Missing Column'+(missing.length>1?'s':'')+': <strong>'+missing.map(esc).join(', ')+'</strong><br>تأكد إن الملف فيه عمود الكود وعمود اللوكيشن (بأي ترتيب أعمدة واضح الاسم)، أو عمودين بسيطين بالترتيب: الكود ثم اللوكيشن.';
+}
+// Parses the MAP LOC sheet: tries header-name detection first (Code/Location columns by
+// name, any order), and falls back to plain column position — column A = code, column B =
+// location, first row treated as a header row — when no matching header names are found.
+function mcParseSheet(ws){
+  var json = XLSX.utils.sheet_to_json(ws, {defval:''});
+  if(json.length){
+    var headerKeys = Object.keys(json[0]);
+    var codeKey = guessKey(headerKeys, MC_REQUIRED_COLS[0].patterns);
+    var locKey = guessKey(headerKeys, MC_REQUIRED_COLS[1].patterns);
+    if(codeKey && locKey){
+      return json.map(function(r){ return { code:String(r[codeKey]||'').trim(), location:String(r[locKey]||'').trim() }; })
+        .filter(function(r){ return r.code && r.location; });
+    }
+  }
+  // Fallback: positional columns, first row is a header row and is skipped.
+  var raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  var out = [];
+  for(var i=1;i<raw.length;i++){
+    var row = raw[i]||[];
+    var code = String(row[0]||'').trim(), loc = String(row[1]||'').trim();
+    if(code && loc) out.push({code:code, location:loc});
+  }
+  return out;
+}
+function handleMapCheckUpload(file){
+  var branch = visit.visitInfo.branch;
+  if(!branch){ showToast('اختر الفرع في بيانات الزيارة أولاً'); return; }
+  var statusEl=document.getElementById('mcUploadStatus');
+  statusEl.textContent='جاري القراءة...';
+  mcShowValidation([]);
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array'});
+      var sheetName = wb.SheetNames.find(function(n){return /map|loc|لوكيشن|كود/i.test(n);}) || wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+      var parsed = mcParseSheet(ws);
+      if(!parsed.length){ statusEl.textContent=''; mcShowValidation(['(لا توجد صفوف بيانات صحيحة — تأكد من وجود عمود كود وعمود لوكيشن)']); return; }
+
+      var existing = mcDataFor(branch);
+      if(existing.rows.length && !confirm('سيتم استبدال ماب الفرع "'+branch+'" الحالي بـ '+parsed.length.toLocaleString('en-US')+' كود من الملف المرفوع. متابعة؟')){ statusEl.textContent=''; return; }
+
+      var rows = parsed.map(function(r){ return { code:r.code, location:r.location, scanned:false, scanResult:null, scanAt:null, scanLocation:null }; });
+      var fresh = { rows: rows, log: [], mapImage: existing.mapImage };
+      mcSaveFor(branch, fresh);
+      renderMapCheck();
+      statusEl.textContent = 'تم استيراد '+rows.length.toLocaleString('en-US')+' كود من شيت "'+sheetName+'" لفرع '+branch;
+      showToast('تم بناء ماب الفرع من ملف MAP LOC');
+    }catch(err){
+      statusEl.textContent='';
+      mcShowValidation(['(تعذّرت قراءة الملف — تأكد أنه Excel أو CSV صحيح)']);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+document.getElementById('mcUploadInput').addEventListener('change', function(e){
+  var f=e.target.files[0]; if(f) handleMapCheckUpload(f);
+  e.target.value='';
+});
+
+document.getElementById('mcClearMapBtn').addEventListener('click', function(){
+  var branch = visit.visitInfo.branch; if(!branch) return;
+  var data = mcDataFor(branch);
+  if(!data.rows.length && !data.log.length) return;
+  if(!confirm('سيتم تفريغ كل بيانات Map Check الخاصة بفرع '+branch+' (ماب الأكواد وسجل الفحص وصورة الماب). متابعة؟')) return;
+  mcSaveFor(branch, { rows:[], log:[], mapImage:null });
+  renderMapCheck();
+  document.getElementById('mcUploadStatus').textContent='';
+});
+
+document.getElementById('mcNewSessionBtn').addEventListener('click', function(){
+  var branch = visit.visitInfo.branch; if(!branch) return;
+  var data = mcDataFor(branch);
+  if(!data.log.length){ showToast('مفيش سجل فحص لتصفيره'); return; }
+  if(!confirm('سيتم تصفير سجل الفحص فقط (ماب الأكواد وصورة الماب هيفضلوا زي ما هم). متابعة؟')) return;
+  data.log = [];
+  data.rows.forEach(function(r){ r.scanned=false; r.scanResult=null; r.scanAt=null; r.scanLocation=null; });
+  mcSaveFor(branch, data);
+  renderMapCheck();
+  showToast('تم بدء فحص جديد');
+});
+
+document.getElementById('mcMapImageInput').addEventListener('change', function(e){
+  var branch = visit.visitInfo.branch;
+  var f=e.target.files[0]; e.target.value='';
+  if(!f) return;
+  if(!branch){ showToast('اختر الفرع في بيانات الزيارة أولاً'); return; }
+  if(!/^image\//.test(f.type)){ showToast('الملف المختار مش صورة'); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var data = mcDataFor(branch);
+    data.mapImage = ev.target.result;
+    mcSaveFor(branch, data);
+    renderMapCheck();
+    showToast('تم رفع صورة الماب');
+  };
+  reader.onerror = function(){ showToast('تعذّر قراءة الصورة'); };
+  reader.readAsDataURL(f);
+});
+document.getElementById('mcMapImageRemoveBtn').addEventListener('click', function(){
+  var branch = visit.visitInfo.branch; if(!branch) return;
+  var data = mcDataFor(branch);
+  if(!data.mapImage) return;
+  if(!confirm('إزالة صورة الماب؟')) return;
+  data.mapImage = null;
+  mcSaveFor(branch, data);
+  renderMapCheck();
+});
+
+document.getElementById('mcBackBtn').addEventListener('click', function(){ goToTab('audit'); });
+
+var MC_ACTIVE_LOCATION = '';
+document.getElementById('mcLocationSelect').addEventListener('change', function(e){
+  MC_ACTIVE_LOCATION = e.target.value;
+  renderMapCheck();
+  var inp=document.getElementById('mcCodeInput'); if(inp && !inp.disabled) inp.focus();
+});
+
+function mcShowLastResult(kind, text){
+  var box=document.getElementById('mcLastResult');
+  box.style.display='block';
+  box.textContent = text;
+  if(kind==='CORRECT'){ box.style.background='var(--pass-tint)'; box.style.color='var(--pass)'; }
+  else if(kind==='WRONG'){ box.style.background='var(--fail-tint)'; box.style.color='var(--fail)'; }
+  else { box.style.background='var(--fail-tint)'; box.style.color='var(--fail)'; }
+}
+function mcSubmitCode(){
+  var branch = visit.visitInfo.branch;
+  var inp=document.getElementById('mcCodeInput');
+  var typed = inp.value.trim();
+  if(!typed) return;
+  if(!branch){ mcShowLastResult('WRONG', 'اختر الفرع في بيانات الزيارة أولاً'); return; }
+  if(!MC_ACTIVE_LOCATION){ mcShowLastResult('WRONG', 'اختر اللوكيشن أولاً'); return; }
+
+  var row = mcFindRowByCode(branch, typed);
+  var result, correctLoc;
+  if(!row){ result='UNKNOWN'; correctLoc=null; }
+  else { correctLoc = row.location; result = (mcNorm(correctLoc)===mcNorm(MC_ACTIVE_LOCATION)) ? 'CORRECT' : 'WRONG'; }
+
+  var data = mcDataFor(branch);
+  var entry = { at:new Date().toISOString(), selectedLocation:MC_ACTIVE_LOCATION, code:typed, correctLocation:correctLoc, result:result };
+  data.log.unshift(entry);
+  if(row){ row.scanned=true; row.scanResult=result; row.scanAt=entry.at; row.scanLocation=MC_ACTIVE_LOCATION; }
+  mcSaveFor(branch, data);
+
+  if(result==='CORRECT') mcShowLastResult('CORRECT', 'صحيح — الكود "'+typed+'" فعلاً في '+MC_ACTIVE_LOCATION);
+  else if(result==='WRONG') mcShowLastResult('WRONG', 'خطأ! الكود "'+typed+'" المفروض يكون في "'+correctLoc+'" مش "'+MC_ACTIVE_LOCATION+'"');
+  else mcShowLastResult('UNKNOWN', 'الكود "'+typed+'" غير موجود في ماب الفرع أصلاً');
+
+  inp.value='';
+  renderMapCheck();
+  inp.focus();
+}
+document.getElementById('mcCheckBtn').addEventListener('click', mcSubmitCode);
+document.getElementById('mcCodeInput').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); mcSubmitCode(); } });
+
+function renderMapCheck(){
+  var branch = visit.visitInfo.branch;
+  var hint=document.getElementById('mcBranchHint'), main=document.getElementById('mcMainPanel'),
+      imgPanel=document.getElementById('mcImagePanel'), checkPanel=document.getElementById('mcCheckPanel');
+  hint.style.display = branch? 'none':'block';
+  main.style.display = branch? 'block':'none';
+  imgPanel.style.display = branch? 'block':'none';
+  checkPanel.style.display = branch? 'block':'none';
+  document.getElementById('mcBranchName').textContent = branch||'—';
+  if(!branch){
+    document.getElementById('mcSummaryCards').innerHTML='';
+    document.getElementById('mcLogBody').innerHTML='';
+    document.getElementById('mcRowsBody').innerHTML='';
+    document.getElementById('mcLogCount').textContent='';
+    document.getElementById('mcRowsCount').textContent='';
+    return;
+  }
+
+  var data = mcDataFor(branch);
+
+  // full map reference image
+  var mapWrap=document.getElementById('mcMapImageWrap'), mapImg=document.getElementById('mcMapImagePreview'),
+      mapStatus=document.getElementById('mcMapImageStatus'), mapRemoveBtn=document.getElementById('mcMapImageRemoveBtn');
+  if(data.mapImage){
+    mapImg.src = data.mapImage;
+    mapWrap.style.display='block';
+    mapStatus.textContent='تم رفع صورة الماب';
+    mapRemoveBtn.style.display='';
+  } else {
+    mapWrap.style.display='none';
+    mapImg.src='';
+    mapStatus.textContent='لم يتم رفع صورة للماب بعد';
+    mapRemoveBtn.style.display='none';
+  }
+
+  // location dropdown
+  var sel=document.getElementById('mcLocationSelect');
+  var cur = sel.value||MC_ACTIVE_LOCATION;
+  var locs = mcLocations(branch);
+  sel.innerHTML = '<option value="">اختر لوكيشن…</option>'+locs.map(function(l){
+    var st=mcLocationStats(branch, l);
+    return '<option value="'+esc(l)+'">'+esc(l)+' ('+st.correct+'/'+st.total+')</option>';
+  }).join('');
+  sel.value = locs.indexOf(cur)>-1? cur : '';
+  MC_ACTIVE_LOCATION = sel.value;
+
+  // location progress
+  var lbl=document.getElementById('mcLocationProgressLbl'), bar=document.getElementById('mcLocationBar');
+  if(MC_ACTIVE_LOCATION){
+    var st=mcLocationStats(branch, MC_ACTIVE_LOCATION);
+    var pct = st.total? (st.correct/st.total*100):0;
+    lbl.textContent = MC_ACTIVE_LOCATION+': '+st.correct+' / '+st.total+' — '+Math.round(pct)+'%';
+    bar.style.width = pct+'%';
+  } else {
+    lbl.textContent='—'; bar.style.width='0%';
+  }
+
+  // summary cards (overall, across all locations checked so far)
+  var totalRows = data.rows.length;
+  var scannedCorrect = data.rows.filter(function(r){ return r.scanResult==='CORRECT'; }).length;
+  var scannedWrong = data.rows.filter(function(r){ return r.scanResult==='WRONG'; }).length;
+  var notScanned = totalRows - scannedCorrect - scannedWrong;
+  var unknownScans = data.log.filter(function(l){ return l.result==='UNKNOWN'; }).length;
+  var totalChecks = data.log.length;
+  var errorChecks = data.log.filter(function(l){ return l.result!=='CORRECT'; }).length;
+  var errorRate = totalChecks? (errorChecks/totalChecks*100) : 0;
+  var cardsHost=document.getElementById('mcSummaryCards'); cardsHost.innerHTML='';
+  [
+    {k:'عدد اللوكيشنز', v:locs.length},
+    {k:'إجمالي أكواد الماب', v:totalRows},
+    {k:'صحيح (مكانه الصح)', v:scannedCorrect, color:'var(--pass)'},
+    {k:'في مكان غلط', v:scannedWrong, color:'var(--fail)'},
+    {k:'لسه ما اتفحصش', v:notScanned},
+    {k:'أكواد غير موجودة بالماب', v:unknownScans, color:'var(--fail)'},
+    {k:'نسبة الأخطاء', v:Math.round(errorRate)+'%', hero:true, color: errorRate>0?'#F2C94C':'#6FCF97'}
+  ].forEach(function(c){
+    var el=document.createElement('div'); el.className='score-card'+(c.hero?' hero':'');
+    var kEl=document.createElement('div'); kEl.className='k'; kEl.textContent=c.k; el.appendChild(kEl);
+    var vEl=document.createElement('div'); vEl.className='v'; vEl.textContent=c.v;
+    if(c.color) vEl.style.color=c.color;
+    el.appendChild(vEl);
+    cardsHost.appendChild(el);
+  });
+
+  // scan log table (most recent first; capped for performance)
+  var logBody=document.getElementById('mcLogBody');
+  document.getElementById('mcLogCount').textContent = data.log.length.toLocaleString('en-US')+' فحص';
+  if(!data.log.length){ logBody.innerHTML='<tr><td colspan="5" class="empty">لسه مفيش أكواد اتفحصت</td></tr>'; }
+  else {
+    logBody.innerHTML='';
+    data.log.slice(0,500).forEach(function(l){
+      var tr=document.createElement('tr');
+      var timeStr = new Date(l.at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      var resClass = l.result==='CORRECT'?'status-pass':'status-fail';
+      tr.innerHTML = '<td style="font-family:var(--mono);">'+esc(timeStr)+'</td><td>'+esc(l.selectedLocation)+'</td>'+
+        '<td style="font-family:var(--mono);">'+esc(l.code)+'</td>'+
+        '<td>'+esc(l.correctLocation||'—')+'</td>'+
+        '<td><span class="badge-status '+resClass+'">'+l.result+'</span></td>';
+      logBody.appendChild(tr);
+    });
+  }
+
+  // map rows status table
+  var rowsBody=document.getElementById('mcRowsBody');
+  document.getElementById('mcRowsCount').textContent = totalRows.toLocaleString('en-US')+' كود';
+  if(!totalRows){ rowsBody.innerHTML='<tr><td colspan="4" class="empty">لا يوجد ماب مرفوع بعد لهذا الفرع</td></tr>'; }
+  else {
+    rowsBody.innerHTML='';
+    var MAX_RENDER=1000;
+    data.rows.slice(0,MAX_RENDER).forEach(function(r){
+      var tr=document.createElement('tr');
+      var statusText = !r.scanned? 'لم يُفحص' : (r.scanResult==='CORRECT'? 'صحيح':'في مكان غلط');
+      var statusClass = !r.scanned? '' : (r.scanResult==='CORRECT'?'status-pass':'status-fail');
+      tr.innerHTML = '<td style="font-family:var(--mono);">'+esc(r.code)+'</td><td>'+esc(r.location)+'</td>'+
+        '<td>'+(r.scanned? esc(r.scanLocation||'—') : '—')+'</td>'+
+        '<td><span class="badge-status '+statusClass+'">'+statusText+'</span></td>';
+      rowsBody.appendChild(tr);
+    });
+    if(totalRows>MAX_RENDER){
+      var trMore=document.createElement('tr'); var tdMore=document.createElement('td'); tdMore.colSpan=4; tdMore.className='empty';
+      tdMore.textContent='+ '+(totalRows-MAX_RENDER).toLocaleString('en-US')+' كود إضافي — استخدم فلتر اللوكيشن لتضييق النتائج';
+      trMore.appendChild(tdMore); rowsBody.appendChild(trMore);
+    }
+  }
+}
+
+document.getElementById('mcFinalizeBtn').addEventListener('click', function(){
+  var branch = visit.visitInfo.branch;
+  if(!branch){ showToast('اختر الفرع أولاً'); return; }
+  var data = mcDataFor(branch);
+  if(!data.rows.length && !data.log.length){ showToast('مفيش بيانات Map Check لتصديرها'); return; }
+
+  var totalRows = data.rows.length;
+  var scannedCorrect = data.rows.filter(function(r){ return r.scanResult==='CORRECT'; }).length;
+  var scannedWrong = data.rows.filter(function(r){ return r.scanResult==='WRONG'; }).length;
+  var notScanned = totalRows - scannedCorrect - scannedWrong;
+  var unknownScans = data.log.filter(function(l){ return l.result==='UNKNOWN'; }).length;
+  var totalChecks = data.log.length;
+  var errorChecks = data.log.filter(function(l){ return l.result!=='CORRECT'; }).length;
+  var errorRate = totalChecks? Math.round(errorChecks/totalChecks*10000)/100 : 0;
+  var locs = mcLocations(branch);
+
+  var summaryAoA = [
+    ['RAVIN QC — Map Check Report'],
+    ['Branch', branch],
+    ['Generated At', new Date().toLocaleString('en-US')],
+    [],
+    ['Total codes in branch map', totalRows],
+    ['Correct (right location)', scannedCorrect],
+    ['Wrong (misplaced)', scannedWrong],
+    ['Not scanned yet', notScanned],
+    ['Unknown codes scanned (not in map)', unknownScans],
+    ['Total scans logged', totalChecks],
+    ['Error rate (%)', errorRate],
+    [],
+    ['Per-location breakdown'],
+    ['Location','Expected Codes','Correct','Remaining']
+  ];
+  locs.forEach(function(l){
+    var st = mcLocationStats(branch, l);
+    summaryAoA.push([l, st.total, st.correct, st.remaining]);
+  });
+
+  var logAoA = [['Time','Selected Location','Code','Correct Location','Result']];
+  data.log.slice().reverse().forEach(function(l){
+    logAoA.push([new Date(l.at).toLocaleString('en-US'), l.selectedLocation, l.code, l.correctLocation||'', l.result]);
+  });
+
+  var rowsAoA = [['Code','Correct Location','Scanned?','Scan Location','Scan Result','Scan Time']];
+  data.rows.forEach(function(r){
+    rowsAoA.push([r.code, r.location, r.scanned?'YES':'NO', r.scanLocation||'', r.scanResult||'', r.scanAt? new Date(r.scanAt).toLocaleString('en-US'):'']);
+  });
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryAoA), 'Summary');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(logAoA), 'Scan Log');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsAoA), 'Map Rows Status');
+  var fname = 'RAVIN_MapCheck_'+branch+'_'+(new Date().toISOString().slice(0,10))+'.xlsx';
+  try{
+    XLSX.writeFile(wb, fname);
+    showToast('تم تنزيل تقرير Map Check');
+  }catch(err){
+    showToast('تعذّر إنشاء ملف Excel');
+  }
+});
+
+/* =====================================================================
+   MAINTENANCE — صيانات الفرع
+   Stored separately from the per-visit object (keyed by branch code) since
+   an open item has to be visible and followable on the NEXT visit too, not
+   just the one where it was first noticed.
+   ===================================================================== */
+var MAINT_KEY = 'ravin_qc_maintenance_v1';
+function loadMaintStore(){ try{ return JSON.parse(localStorage.getItem(MAINT_KEY))||{}; }catch(e){ return {}; } }
+function saveMaintStore(store){ try{ localStorage.setItem(MAINT_KEY, JSON.stringify(store)); }catch(e){} }
+function maintListFor(branch){ var store=loadMaintStore(); return store[branch]||[]; }
+function maintSaveListFor(branch, list){ var store=loadMaintStore(); store[branch]=list; saveMaintStore(store); }
+
+var MAINT_STATUS_LABEL = { open:'لم تتم المتابعة', resolved:'تم الإصلاح', not_resolved:'لم يتم الإصلاح' };
+var MAINT_STATUS_CLASS = { open:'status-partial', resolved:'status-pass', not_resolved:'status-fail' };
+
+document.getElementById('maintAddBtn').addEventListener('click', function(){
+  var branch = visit.visitInfo.branch;
+  if(!branch){ showToast('اختر الفرع في بيانات الزيارة أولاً'); return; }
+  var desc = document.getElementById('maintDesc').value.trim();
+  var area = document.getElementById('maintArea').value.trim();
+  if(!desc){ showToast('اكتب وصف المشكلة أولاً'); return; }
+  var list = maintListFor(branch);
+  list.unshift({
+    id:'m'+Date.now(), desc:desc, area:area,
+    notedDate: visit.visitInfo.date || new Date().toISOString().slice(0,10),
+    notedBy: visit.visitInfo.auditor || (SESSION&&SESSION.displayName) || '',
+    status:'open', updatedDate:null
+  });
+  maintSaveListFor(branch, list);
+  document.getElementById('maintDesc').value=''; document.getElementById('maintArea').value='';
+  renderMaintenance();
+  showToast('تم تسجيل ملاحظة الصيانة');
+});
+
+function renderMaintenance(){
+  var branch = visit.visitInfo.branch;
+  var hint=document.getElementById('maintBranchHint'), formPanel=document.getElementById('maintFormPanel');
+  hint.style.display = branch? 'none':'block';
+  formPanel.style.display = branch? 'block':'none';
+  document.getElementById('maintBranchName').textContent = branch||'—';
+  document.getElementById('maintListBranchName').textContent = branch||'—';
+
+  var list = branch? maintListFor(branch) : [];
+  var open = list.filter(function(m){return m.status==='open';}).length;
+  var resolved = list.filter(function(m){return m.status==='resolved';}).length;
+  var notResolved = list.filter(function(m){return m.status==='not_resolved';}).length;
+
+  var cardsHost=document.getElementById('maintSummaryCards'); cardsHost.innerHTML='';
+  [
+    {k:'إجمالي الملاحظات', v:list.length},
+    {k:'لم تتم المتابعة', v:open, color:'var(--partial)'},
+    {k:'تم الإصلاح', v:resolved, color:'var(--pass)'},
+    {k:'لم يتم الإصلاح', v:notResolved, color:'var(--fail)'}
+  ].forEach(function(c){
+    var el=document.createElement('div'); el.className='score-card';
+    var kEl=document.createElement('div'); kEl.className='k'; kEl.textContent=c.k; el.appendChild(kEl);
+    var vEl=document.createElement('div'); vEl.className='v'; vEl.textContent=c.v;
+    if(c.color) vEl.style.color=c.color;
+    el.appendChild(vEl);
+    cardsHost.appendChild(el);
+  });
+
+  document.getElementById('maintListCount').textContent = list.length? (list.length.toLocaleString('en-US')+' ملاحظة') : '';
+  var panel=document.getElementById('maintListPanel');
+  if(!list.length){ panel.innerHTML='<div class="empty">'+(branch? 'لا توجد ملاحظات صيانة مسجّلة بعد لهذا الفرع' : 'اختر الفرع في بيانات الزيارة لعرض ملاحظات الصيانة')+'</div>'; return; }
+  panel.innerHTML='';
+  list.forEach(function(m){
+    var row=document.createElement('div'); row.className='hist-row'; row.style.alignItems='flex-start';
+    var left=document.createElement('div'); left.style.flex='1';
+    left.innerHTML = '<div class="hb">'+esc(m.desc)+'</div>'+
+      '<div class="hs">'+(m.area? esc(m.area)+' — ':'')+esc(m.notedDate)+(m.notedBy? ' — '+esc(m.notedBy):'')+'</div>'+
+      (m.updatedDate? '<div class="hs">آخر تحديث: '+esc(m.updatedDate)+'</div>' : '');
+    row.appendChild(left);
+    var statusWrap=document.createElement('div');
+    var sel=document.createElement('select');
+    Object.keys(MAINT_STATUS_LABEL).forEach(function(k){ var o=document.createElement('option'); o.value=k; o.textContent=MAINT_STATUS_LABEL[k]; sel.appendChild(o); });
+    sel.value=m.status;
+    sel.addEventListener('change', function(){
+      m.status=sel.value; m.updatedDate=visit.visitInfo.date||new Date().toISOString().slice(0,10);
+      maintSaveListFor(branch, list); renderMaintenance();
+    });
+    statusWrap.appendChild(sel);
+    var badge=document.createElement('span'); badge.className='badge-status '+MAINT_STATUS_CLASS[m.status];
+    badge.textContent=MAINT_STATUS_LABEL[m.status]; badge.style.marginInlineStart='8px';
+    statusWrap.appendChild(badge);
+    row.appendChild(statusWrap);
+    panel.appendChild(row);
+  });
+}
+
+/* =====================================================================
+   FINAL RESULT VIEW
+   ===================================================================== */
+function renderFinal(){
+  var res = finalResultTotals();
+  document.getElementById('finalBig').textContent = Math.round(res.overall)+'%';
+  document.getElementById('finalManager').textContent = Math.round(res.manager)+'%';
+  document.getElementById('finalCashier').textContent = Math.round(res.cashier)+'%';
+  document.getElementById('finalAssMerch').textContent = Math.round(res.assistantMerch)+'%';
+  document.getElementById('finalMerch').textContent = Math.round(res.merch)+'%';
+  document.getElementById('finalCoord').textContent = Math.round(res.coordinator)+'%';
+  document.getElementById('includeCoordToggle').checked = !!visit.includeCoordInOverall;
+
+  // completion checklist
+  var findings = allFindings();
+  var allScored = true; // scores always have a default, so this always true; kept for structure/clarity
+  var allFindingsHaveComment = findings.every(function(f){return f.comment&&f.comment.trim();});
+  var overallComputed = true;
+  var noOverMax = true; // enforced by input clamping
+
+  var checks = [
+    ['تم تقييم جميع البنود', allScored],
+    ['كل بند به نقص مسجَّل له ملاحظة', allFindingsHaveComment],
+    ['تم احتساب النتيجة الإجمالية', overallComputed],
+    ['لا توجد درجات أعلى من الدرجة الكاملة', noOverMax]
+  ];
+  var ul=document.getElementById('completionChecklist'); ul.innerHTML='';
+  var okCount=0;
+  checks.forEach(function(c){
+    var li=document.createElement('li'); li.className=c[1]?'ok':'bad';
+    li.innerHTML='<span class="dot"></span>'+c[0];
+    ul.appendChild(li); if(c[1]) okCount++;
+  });
+  document.getElementById('completionPct').textContent = Math.round(okCount/checks.length*100)+'%';
+}
+
+document.getElementById('includeCoordToggle').addEventListener('change', function(e){
+  visit.includeCoordInOverall = e.target.checked; persist(); renderDashboardAndFindings(); renderFinal();
+});
+
+/* =====================================================================
+   MASTER RENDER
+   ===================================================================== */
+function renderDashboardAndFindings(){ renderDashboard(); renderFindings(); }
+function renderAll(){
+  renderVisitGrid(); renderDashboard(); renderSections(); renderFindings(); renderInventory();
+  renderMapCheck(); renderMaintenance(); renderFinal(); renderHistory();
+}
+
+/* =====================================================================
+   TABS
+   ===================================================================== */
+function goToTab(view){
+  var btn = document.querySelector('.tab-btn[data-view="'+view+'"]');
+  if(!btn) return;
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active');});
+  document.getElementById('view-'+view).classList.add('active');
+}
+document.querySelectorAll('.tab-btn').forEach(function(btn){
+  if(!btn.dataset.view) return; // plain <a> links (admin-only report pages) navigate normally
+  btn.addEventListener('click', function(){ goToTab(btn.dataset.view); });
+});
+
+/* =====================================================================
+   SEARCH / EXPAND / COLLAPSE
+   ===================================================================== */
+document.getElementById('itemSearch').addEventListener('input', function(e){
+  SEARCH_TERM = e.target.value.trim().toLowerCase();
+  if(SEARCH_TERM){ visibleSections().forEach(function(k){OPEN_SECTIONS[k]=true;}); }
+  renderSections();
+});
+document.getElementById('expandAll').addEventListener('click', function(){ visibleSections().forEach(function(k){OPEN_SECTIONS[k]=true;}); renderSections(); });
+document.getElementById('collapseAll').addEventListener('click', function(){ visibleSections().forEach(function(k){OPEN_SECTIONS[k]=false;}); renderSections(); });
+
+/* =====================================================================
+   INVENTORY controls
+   ===================================================================== */
+
+
+/* =====================================================================
+   SAVE / LOAD / RESET / HISTORY
+   ===================================================================== */
+function loadHistory(){ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY))||[]; }catch(e){ return []; } }
+function saveHistory(list){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }catch(e){} }
+
+function showToast(msg){
+  var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');}, 2200);
+}
+
+document.getElementById('saveVisit').addEventListener('click', function(){
+  persist();
+  var list = loadHistory();
+  var res = finalResultTotals();
+  var entry = { id: 'v'+Date.now(), savedAt:new Date().toISOString(), branch:visit.visitInfo.branch||'—',
+    date:visit.visitInfo.date, auditor:visit.visitInfo.auditor||'—', score:Math.round(res.overall), data:JSON.parse(JSON.stringify(visit)) };
+  list.unshift(entry); saveHistory(list);
+  renderHistory();
+  showToast('تم حفظ الزيارة في السجل');
+});
+
+document.getElementById('resetVisit').addEventListener('click', function(){
+  if(!confirm('سيتم بدء زيارة جديدة فارغة. هل تريد المتابعة؟')) return;
+  visit = emptyVisit(); persist(); OPEN_SECTIONS={}; renderAll();
+  showToast('تم بدء زيارة جديدة');
+});
+
+function renderHistory(){
+  var list = loadHistory();
+  // Branch accounts only ever see their own branch's saved visits.
+  if(isReadOnly() && SESSION && SESSION.branch){
+    list = list.filter(function(e){ return e.branch===SESSION.branch; });
+  }
+  var panel = document.getElementById('historyPanel');
+  if(!list.length){ panel.innerHTML='<div class="empty">لا توجد زيارات محفوظة بعد</div>'; return; }
+  panel.innerHTML='';
+  list.forEach(function(entry){
+    var row=document.createElement('div'); row.className='hist-row';
+    row.innerHTML = '<div><div class="hb">'+esc(entry.branch)+'</div><div class="hs">'+esc(entry.date)+' — '+esc(entry.auditor)+'</div></div>'+
+      '<div class="hv">'+entry.score+'%</div>';
+    var actions=document.createElement('div'); actions.style.display='flex'; actions.style.gap='6px';
+    var openBtn=document.createElement('button'); openBtn.className='btn btn-sm'; openBtn.textContent='فتح'; openBtn.type='button';
+    openBtn.addEventListener('click', function(){ visit=JSON.parse(JSON.stringify(entry.data)); persist(); renderAll(); goToTab('audit'); showToast('تم فتح الزيارة'); });
+    actions.appendChild(openBtn);
+    // Duplicate/delete mutate the shared history store — staff (admin/auditor) only.
+    if(!isReadOnly()){
+      var dupBtn=document.createElement('button'); dupBtn.className='btn btn-sm'; dupBtn.textContent='نسخ'; dupBtn.type='button';
+      dupBtn.addEventListener('click', function(){
+        var list2=loadHistory(); var copy=JSON.parse(JSON.stringify(entry)); copy.id='v'+Date.now(); copy.savedAt=new Date().toISOString();
+        list2.unshift(copy); saveHistory(list2); renderHistory(); showToast('تم إنشاء نسخة');
+      });
+      var delBtn=document.createElement('button'); delBtn.className='btn btn-sm btn-danger'; delBtn.textContent='حذف'; delBtn.type='button';
+      delBtn.addEventListener('click', function(){
+        if(!confirm('حذف هذه الزيارة من السجل؟')) return;
+        var list3=loadHistory().filter(function(e){return e.id!==entry.id;}); saveHistory(list3); renderHistory();
+      });
+      actions.appendChild(dupBtn); actions.appendChild(delBtn);
+    }
+    row.appendChild(actions);
+    panel.appendChild(row);
+  });
+}
+
+/* =====================================================================
+   EXPORT CSV
+   ===================================================================== */
+document.getElementById('exportCsv').addEventListener('click', function(){
+  var rows = [['القسم','البند','الدرجة الكاملة','الدرجة الفعلية','الحالة','الملاحظة']];
+  visibleSections().forEach(function(secKey){
+    DATA[secKey].items.forEach(function(it,idx){
+      var actual=itemActual(secKey,idx); var status=statusOf(actual,it.full);
+      var id=secKey+'_'+idx, st=visit.items[id];
+      rows.push([DATA[secKey].label, it.name, it.full, actual, statusLabelAr(status), st.comment||'']);
+    });
+  });
+  var csv = rows.map(function(r){ return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(','); }).join('\r\n');
+  var blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='RAVIN_QC_Audit_'+(visit.visitInfo.branch||'branch')+'_'+(visit.visitInfo.date||'')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showToast('تم تصدير ملف CSV');
+});
+
+/* =====================================================================
+   PRINT REPORT
+   ===================================================================== */
+document.getElementById('generateReport').addEventListener('click', function(){
+  buildPrintReport();
+  setTimeout(function(){ window.print(); }, 60);
+});
+function buildPrintReport(){
+  var res = finalResultTotals();
+  var findings = allFindings();
+  var vi = visit.visitInfo;
+  var html = ''+
+    '<div style="font-family:Cairo,sans-serif;direction:rtl;padding:10px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #7A1230;padding-bottom:10px;margin-bottom:14px;">'+
+      '<div><div style="font-weight:900;font-size:22px;">RAVIN</div><div style="font-size:12px;color:#555;">QUALITY CONTROL — AUDIT VISIT REPORT</div></div>'+
+      '<div style="text-align:left;font-family:monospace;font-size:28px;font-weight:700;">'+Math.round(res.overall)+'%</div>'+
+    '</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;">'+
+      printRow('الفرع', vi.branch, 'تاريخ الزيارة', vi.date)+
+      printRow('نوع الزيارة', vi.visitType, 'المراجع (Auditor)', vi.auditor)+
+      printRow('مدير الفرع', vi.manager, '', '')+
+    '</table>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;">'+
+      '<tr style="background:#f3f1ec;"><th style="border:1px solid #ccc;padding:6px;">المدير</th><th style="border:1px solid #ccc;padding:6px;">الكاشير</th><th style="border:1px solid #ccc;padding:6px;">نائب المرشنديزر</th><th style="border:1px solid #ccc;padding:6px;">المرشنديزر</th><th style="border:1px solid #ccc;padding:6px;">الكوردينيتور</th></tr>'+
+      '<tr>'+[res.manager,res.cashier,res.assistantMerch,res.merch,res.coordinator].map(function(v){return '<td style="border:1px solid #ccc;padding:6px;text-align:center;font-family:monospace;">'+Math.round(v)+'%</td>';}).join('')+'</tr>'+
+    '</table>'+
+    '<div style="font-weight:800;margin:10px 0 6px;">Audit Findings ('+findings.length+')</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
+      '<tr style="background:#f3f1ec;"><th style="border:1px solid #ccc;padding:5px;">القسم</th><th style="border:1px solid #ccc;padding:5px;">البند</th><th style="border:1px solid #ccc;padding:5px;">الملاحظة</th><th style="border:1px solid #ccc;padding:5px;">تأثير الدرجة</th></tr>'+
+      (findings.length? findings.map(function(f){
+        return '<tr><td style="border:1px solid #ccc;padding:5px;">'+esc(f.section)+'</td><td style="border:1px solid #ccc;padding:5px;">'+esc(f.item)+'</td>'+
+          '<td style="border:1px solid #ccc;padding:5px;">'+esc(f.comment||'—')+'</td><td style="border:1px solid #ccc;padding:5px;">'+esc(f.impact||'—')+'</td></tr>';
+      }).join('') : '<tr><td colspan="4" style="border:1px solid #ccc;padding:10px;text-align:center;">لا توجد ملاحظات</td></tr>')+
+    '</table>'+
+    '<div style="margin-top:40px;display:flex;justify-content:space-between;font-size:12px;">'+
+      '<div>توقيع المراجع (Auditor): ______________________</div>'+
+      '<div>توقيع مدير الفرع: ______________________</div>'+
+    '</div>'+
+    '</div>';
+  document.getElementById('printArea').innerHTML = html;
+}
+function printRow(l1,v1,l2,v2){
+  var second = l2 ?
+    '<td style="border:1px solid #ccc;padding:6px;background:#f8f7f4;width:15%;font-weight:700;">'+l2+'</td><td style="border:1px solid #ccc;padding:6px;width:35%;">'+esc(v2||'—')+'</td>' :
+    '<td style="border:1px solid #ccc;padding:6px;" colspan="2"></td>';
+  return '<tr>'+
+    '<td style="border:1px solid #ccc;padding:6px;background:#f8f7f4;width:15%;font-weight:700;">'+l1+'</td><td style="border:1px solid #ccc;padding:6px;width:35%;">'+esc(v1||'—')+'</td>'+
+    second+
+  '</tr>';
+}
+
+/* =====================================================================
+   THEME TOGGLE
+   ===================================================================== */
+document.getElementById('themeToggle').addEventListener('click', function(){
+  var cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
+});
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+applyAuthUI();
+renderAll();
+// Branch accounts land on their own visit history first (pick a visit to review)
+// rather than an audit tab that may still show another branch's leftover data.
+if(isReadOnly()) goToTab('history');
+
+// Register the service worker (relative path) so the app installs and
+// still opens offline once it's been loaded once from GitHub Pages.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('service-worker.js').catch(function(){ /* fine if this fails locally */ });
+  });
+}
+</script>
+</body>
+</html>

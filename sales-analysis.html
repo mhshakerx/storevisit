@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تحليل الأكثر والأقل مبيعاً | RAVIN</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E78'/%3E%3Cpath d='M9 24V8h8a5 5 0 0 1 0 10H9M16 18l7 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+<script>
+/* the tool always opens in dark mode; the toggle only lasts for the current visit */
+document.documentElement.setAttribute('data-theme', 'dark');
+</script>
+<style>
+/* Layout: brand header, one controls bar, then either the two ranked tables or the department analysis. */
+:root {
+  --bg: #F3F5F8;
+  --surface: #FFFFFF;
+  --ink: #17232F;
+  --muted: #566677;
+  --line: #D6DDE5;
+  --head: #EBF0F5;
+  --accent: #1F4E78;
+  --accent-ink: #FFFFFF;
+  --bar: #CFE0F0;
+  --good: #1D7A4D;
+  --bad: #B1352C;
+  --warn-bg: #FFF1D0;
+  --warn-ink: #6B4B00;
+  --font: "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1620; --surface: #16202B; --ink: #E6EDF4; --muted: #93A4B5; --line: #293847; --head: #1C2937;
+    --accent: #7DB3E3; --accent-ink: #0B1620; --bar: #244560; --good: #62C998; --bad: #F18D85;
+    --warn-bg: #3A2F12; --warn-ink: #F3D58A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1620; --surface: #16202B; --ink: #E6EDF4; --muted: #93A4B5; --line: #293847; --head: #1C2937;
+  --accent: #7DB3E3; --accent-ink: #0B1620; --bar: #244560; --good: #62C998; --bad: #F18D85;
+  --warn-bg: #3A2F12; --warn-ink: #F3D58A; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 18px clamp(12px, 3vw, 28px) 40px; display: flex; flex-direction: column; gap: 16px; }
+header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 16px; min-width: 0; flex-wrap: wrap; }
+.logo { height: 34px; width: auto; flex: none; color: var(--ink); }
+.logo .acc { stroke: var(--accent); }
+.brand .sep { width: 1px; height: 38px; background: var(--line); }
+.titles { display: flex; flex-direction: column; min-width: 0; }
+h1 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.3; }
+.by { font-size: 11px; color: var(--muted); letter-spacing: .14em; direction: ltr; text-align: start; font-family: var(--mono); }
+h2 { margin: 0; font-size: 16px; font-weight: 700; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.sm { padding: 5px 10px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.drop { border: 2px dashed var(--line); border-radius: 10px; background: var(--surface); padding: 34px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.drop.over { border-color: var(--accent); background: var(--head); }
+.drop p { margin: 0; color: var(--muted); max-width: 66ch; }
+.drop .big { color: var(--ink); font-size: 17px; font-weight: 600; }
+.file-label { display: inline-block; position: relative; }
+.file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.file-label input:focus-visible + .btn { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.bar { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > label, .field > .lbl { font-size: 12px; color: var(--muted); }
+.field select, .field input[type=number], .field input[type=date] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 150px; }
+.field input[type=number] { min-width: 0; width: 84px; font-variant-numeric: tabular-nums; }
+.field input[type=date] { min-width: 140px; direction: ltr; }
+.chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.checks { display: flex; flex-direction: column; gap: 4px; }
+.checks label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.row2 { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end; width: 100%; padding-top: 14px; border-top: 1px solid var(--line); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--head); color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; }
+.pill.on { background: color-mix(in srgb, var(--good) 20%, var(--surface)); color: var(--good); }
+.stockline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* multi-select */
+.ms { position: relative; }
+.ms-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 190px; max-width: 280px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; cursor: pointer; text-align: start; }
+.ms-btn:hover, .ms-btn[aria-expanded="true"] { border-color: var(--accent); }
+.ms-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-btn.has .ms-sum { color: var(--accent); font-weight: 600; }
+.ms-panel { position: absolute; z-index: 30; top: calc(100% + 4px); inset-inline-start: 0; width: min(92vw, 300px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.28); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.ms-panel input[type=search] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; width: 100%; }
+.ms-tools { display: flex; gap: 6px; }
+.ms-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; }
+.ms-list label { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; cursor: pointer; }
+.ms-list label:hover { background: var(--head); }
+.ms-list .ct { margin-inline-start: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ms-empty { color: var(--muted); padding: 8px; text-align: center; }
+
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 13px; align-items: center; }
+.meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.meta .file { color: var(--ink); font-weight: 600; direction: ltr; unicode-bidi: plaintext; }
+.meta .ltr { direction: ltr; unicode-bidi: plaintext; color: var(--ink); font-weight: 600; }
+details.map { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details.map summary { cursor: pointer; color: var(--muted); }
+details.map .row { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 12px; }
+details.map h3 { margin: 14px 0 0; font-size: 13px; color: var(--muted); font-weight: 600; width: 100%; }
+.notices { display: flex; flex-direction: column; gap: 8px; }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 13px; }
+.notice.err { background: color-mix(in srgb, var(--bad) 16%, var(--surface)); color: var(--bad); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat .s { font-size: 12px; color: var(--muted); direction: ltr; text-align: start; unicode-bidi: plaintext; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 16px; cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 720px), 1fr)); gap: 16px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden; }
+.panel > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.panel > header .sub { color: var(--muted); font-size: 12px; }
+.tw { overflow: auto; max-height: 72vh; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.n { direction: ltr; }
+th { position: sticky; top: 0; background: var(--head); font-size: 12px; font-weight: 600; color: var(--muted); z-index: 1; }
+tbody tr:hover { background: var(--head); }
+td.code { font-family: var(--mono); font-size: 13px; direction: ltr; }
+td.nm { text-align: start; max-width: 200px; overflow: hidden; text-overflow: ellipsis; direction: ltr; font-size: 13px; }
+td.rk { color: var(--muted); width: 1%; }
+td.dt { color: var(--muted); font-size: 13px; }
+small.dr { color: var(--muted); margin-inline-start: 7px; font-size: 11px; direction: ltr; display: inline-block; }
+td.q { position: relative; font-weight: 700; }
+td.q span { position: relative; }
+td.q::before { content: ""; position: absolute; top: 4px; bottom: 4px; right: 0; width: var(--w, 0%); background: var(--bar); }
+td.neg { color: var(--bad); }
+td.neg::before { display: none; }
+em.tag { position: relative; font-style: normal; font-weight: 500; font-size: 11px; color: var(--warn-ink); background: var(--warn-bg); border-radius: 4px; padding: 1px 6px; margin-inline-start: 6px; }
+.empty { padding: 28px 14px; text-align: center; color: var(--muted); }
+.tie { color: var(--muted); font-size: 12px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.hl { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.catctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.catctl select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+td.cat { font-weight: 700; }
+td.shr { color: var(--muted); }
+.toast { position: fixed; inset-inline: 0; bottom: 18px; margin: 0 auto; width: fit-content; max-width: 92vw; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; z-index: 40; }
+@media (prefers-reduced-motion: no-preference) { .btn, .chip { transition: border-color .15s, background .15s; } }
+</style>
+<style>
+.ravin-topbar{position:sticky;top:0;z-index:500;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;background:#56061F;color:#fff;font-family:"Cairo",system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.18);}
+.ravin-topbar .rv-brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.3px;font-size:14px;}
+.ravin-topbar .rv-brand .mk{color:#E9C77B;font-weight:900;}
+.ravin-topbar a.rv-back{color:#fff;text-decoration:none;font-size:12.5px;font-weight:700;background:rgba(255,255,255,.12);padding:7px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
+.ravin-topbar a.rv-back:hover{background:rgba(255,255,255,.22);}
+</style>
+</head>
+<body>
+<script>
+(function(){
+  try{
+    var raw = localStorage.getItem('ravin_qc_session_v1');
+    var s = raw ? JSON.parse(raw) : null;
+    if(!s){ location.replace('index.html'); return; }
+    if(s.role === 'branch'){ location.replace('app.html'); return; }
+  }catch(e){ location.replace('index.html'); }
+})();
+</script>
+<div class="ravin-topbar">
+  <div class="rv-brand"><span class="mk">RAVIN</span> · تحليل الأكثر والأقل مبيعاً</div>
+  <a class="rv-back" href="app.html">→ رجوع لنظام RAVIN QC</a>
+</div>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <!-- RAVIN wordmark: geometric strokes, the A is an open peak (a rising chart line). Swap this block to change the logo. -->
+      <svg class="logo" viewBox="0 0 142 40" role="img" aria-label="RAVIN" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linejoin="bevel" stroke-linecap="butt">
+        <path d="M4 36V4h13a9 9 0 0 1 0 18H4M14 22l10 14"/>
+        <path class="acc" d="M34 36L46 4l12 32"/>
+        <path d="M68 4l12 32 12-32"/>
+        <path d="M103 4v32"/>
+        <path d="M114 36V4l22 32V4"/>
+      </svg>
+      <span class="sep" aria-hidden="true"></span>
+      <div class="titles">
+        <h1>تحليل الأكثر والأقل مبيعاً</h1>
+        <div class="by">BY : M. SHAKER</div>
+      </div>
+    </div>
+    <button class="btn" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي والنهاري">الوضع النهاري</button>
+  </header>
+
+  <section class="drop" id="drop">
+    <p class="big">اسحب شيت المبيعات هنا، ومعاه شيت الاستوك لو عندك</p>
+    <p>تقدر ترفع الملفين مع بعض والأداة تعرف كل واحد لوحدها. بيقبل Excel (xlsx) و CSV، والملفات بتتقري على جهازك وما بتترفعش لأي مكان. الأكواد بتتجمّع بدون المقاس، والقسم بيتاخد من اسم الصنف.</p>
+    <label class="file-label"><input type="file" id="file" accept=".xlsx,.csv" multiple><span class="btn primary">اختيار ملف أو أكتر</span></label>
+  </section>
+
+  <div class="notices" id="msgs"></div>
+
+  <div id="app" hidden>
+    <div class="bar">
+      <div class="field">
+        <span class="lbl">عدد الأكواد في كل جدول</span>
+        <div class="chips" id="chips">
+          <button class="chip" type="button" data-n="20" aria-pressed="false">20</button>
+          <button class="chip" type="button" data-n="50" aria-pressed="true">50</button>
+          <button class="chip" type="button" data-n="100" aria-pressed="false">100</button>
+          <input type="number" id="n" min="1" max="1000" value="50" aria-label="عدد مخصص" title="عدد مخصص">
+        </div>
+      </div>
+      <div class="field"><span class="lbl" id="lblDept">الأقسام (اختار أكتر من قسم)</span><div id="msDept"></div></div>
+      <div class="field"><span class="lbl" id="lblMonth">شهر دخول الموديل للفرع</span><div id="msMonth"></div></div>
+      <div class="field"><label for="dFrom">دخل من تاريخ</label><input type="date" id="dFrom"></div>
+      <div class="field"><label for="dTo">لحد تاريخ</label><input type="date" id="dTo"></div>
+      <div class="field">
+        <label for="scope">الأقل مبيعاً بيشمل</label>
+        <select id="scope">
+          <option value="all">كل الأكواد اللي ظهرت في المبيعات</option>
+          <option value="positive">اللي اتباعت فعلاً (صافي أكبر من صفر)</option>
+          <option value="plusUnsold" data-stock>المبيعات + أكواد الاستوك اللي متباعتش</option>
+          <option value="unsold" data-stock>أكواد الاستوك اللي متباعتش بس</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="checks"><label><input type="checkbox" id="stripSize" checked> تجميع المقاسات تحت كود واحد</label></div>
+        <div class="field">
+          <span class="lbl">شيت الاستوك</span>
+          <div class="stockline">
+            <span class="pill" id="stockState">غير مضاف</span>
+            <label class="file-label"><input type="file" id="fileStock" accept=".xlsx,.csv"><span class="btn sm">إضافة / تغيير</span></label>
+            <button class="btn sm" id="stockClear" type="button" hidden>إزالة</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="lbl">شيت المبيعات</span>
+          <div class="stockline"><span class="pill on" id="salesState"></span>
+            <label class="file-label"><input type="file" id="fileSales" accept=".xlsx,.csv"><span class="btn sm">فتح ملف تاني</span></label></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="btnCur" type="button">تحميل Excel (الفلتر الحالي)</button>
+          <button class="btn" id="btnAll" type="button">تحميل Excel شيت لكل قسم</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta" id="meta"></div>
+
+    <details class="map" id="mapBox">
+      <summary>الأعمدة اللي اتقرت من الملفات (غيّرها لو الاختيار التلقائي غلط)</summary>
+      <div class="row">
+        <h3>شيت المبيعات</h3>
+        <div class="field"><label for="selBar">كود المنتج / الباركود</label><select id="selBar"></select></div>
+        <div class="field"><label for="selName">اسم الصنف</label><select id="selName"></select></div>
+        <div class="field"><label for="selQty">الكمية</label><select id="selQty"></select></div>
+        <div class="field"><label for="selSub">قيمة البيع</label><select id="selSub"></select></div>
+        <div class="field"><label for="selDept">القسم</label><select id="selDept"></select></div>
+      </div>
+      <div class="row" id="stockMap" hidden>
+        <h3>شيت الاستوك</h3>
+        <div class="field"><label for="stBar">كود المنتج / الباركود</label><select id="stBar"></select></div>
+        <div class="field"><label for="stName">اسم الصنف</label><select id="stName"></select></div>
+        <div class="field"><label for="stQty">كمية الاستوك</label><select id="stQty"></select></div>
+        <div class="field"><label for="stDate">عمود تاريخ الدخول</label><select id="stDate"></select></div>
+        <div class="field"><label for="stDept">القسم</label><select id="stDept"></select></div>
+      </div>
+    </details>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="tabs" role="tablist" aria-label="طريقة العرض">
+      <button role="tab" id="tabCodes" aria-selected="true" aria-controls="viewCodes" type="button">أكثر وأقل الأكواد</button>
+      <button role="tab" id="tabCats" aria-selected="false" aria-controls="viewCats" type="button">تحليل الأصناف (الأقسام): عدد وقيمة</button>
+    </div>
+
+    <div id="viewCodes" role="tabpanel" aria-labelledby="tabCodes">
+      <div class="grid">
+        <section class="panel" aria-labelledby="hTop">
+          <header><h2 id="hTop">الأكثر مبيعاً</h2><span class="sub" id="subTop"></span></header>
+          <div class="tw"><table id="tTop"></table></div>
+          <div class="tie" id="tieTop" hidden></div>
+        </section>
+        <section class="panel" aria-labelledby="hBot">
+          <header><h2 id="hBot">الأقل مبيعاً</h2><span class="sub" id="subBot"></span></header>
+          <div class="tw"><table id="tBot"></table></div>
+          <div class="tie" id="tieBot" hidden></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="viewCats" role="tabpanel" aria-labelledby="tabCats" hidden>
+      <div class="hl" id="catHl"></div>
+      <section class="panel" aria-labelledby="hCat">
+        <header>
+          <h2 id="hCat">الأصناف بالكمية والقيمة</h2>
+          <div class="catctl">
+            <label for="catBy" class="sub">ترتيب حسب</label>
+            <select id="catBy"><option value="qty">الكمية</option><option value="value">القيمة</option></select>
+            <button class="btn sm" id="catDir" type="button">الأكثر أولاً</button>
+          </div>
+        </header>
+        <div class="tw"><table id="tCat"></table></div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* Core: xlsx reader, sales + stock analysis, filters, xlsx writer. No external libraries. */
+const Core = (() => {
+  const td = new TextDecoder('utf-8');
+  const te = new TextEncoder();
+
+  /* ---------- XML helpers ---------- */
+  function xmlDecode(s) {
+    return s
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+  function xmlEscape(s) {
+    return String(s)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ---------- ZIP reading (deflate via DecompressionStream) ---------- */
+  async function inflateRaw(u8) {
+    const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function unzip(buf) {
+    const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('الملف مش xlsx صالح (مفيش بنية ZIP)');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const entries = {};
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true);
+      const nlen = dv.getUint16(p + 28, true);
+      const elen = dv.getUint16(p + 30, true);
+      const clen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = td.decode(u8.subarray(p + 46, p + 46 + nlen));
+      entries[name] = { method, csize, lho };
+      p += 46 + nlen + elen + clen;
+    }
+    return {
+      names: Object.keys(entries),
+      async text(name) {
+        const e = entries[name];
+        if (!e) return null;
+        const ln = dv.getUint16(e.lho + 26, true);
+        const le = dv.getUint16(e.lho + 28, true);
+        const start = e.lho + 30 + ln + le;
+        const raw = u8.subarray(start, start + e.csize);
+        const data = e.method === 0 ? raw : await inflateRaw(raw);
+        return td.decode(data);
+      }
+    };
+  }
+
+  /* ---------- XLSX reading ---------- */
+  function colIndex(ref) {
+    const m = /^([A-Z]+)/.exec(ref);
+    let n = 0;
+    for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+    return n - 1;
+  }
+  function parseSharedStrings(xml) {
+    const out = [];
+    if (!xml) return out;
+    const re = /<si\b[^>]*>([\s\S]*?)<\/si>|<si\b[^>]*\/>/g;
+    let m;
+    while ((m = re.exec(xml))) {
+      const body = (m[1] || '').replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+      let s = '';
+      const tre = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
+      let t;
+      while ((t = tre.exec(body))) s += t[1];
+      out.push(xmlDecode(s));
+    }
+    return out;
+  }
+  function parseSheet(xml, shared) {
+    const rows = [];
+    const rowRe = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
+    let rm, autoRow = 0;
+    while ((rm = rowRe.exec(xml))) {
+      const rAttr = /\br="(\d+)"/.exec(rm[1]);
+      const ri = rAttr ? parseInt(rAttr[1], 10) - 1 : autoRow;
+      autoRow = ri + 1;
+      const body = rm[2] || '';
+      const row = [];
+      const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+      let cm, autoCol = 0;
+      while ((cm = cellRe.exec(body))) {
+        const attrs = cm[1];
+        const ref = /\br="([A-Z]+\d+)"/.exec(attrs);
+        const ci = ref ? colIndex(ref[1]) : autoCol;
+        autoCol = ci + 1;
+        const type = (/\bt="([^"]+)"/.exec(attrs) || [])[1] || 'n';
+        const inner = cm[2] || '';
+        let val = null;
+        if (type === 'inlineStr') {
+          let s = '';
+          const tre = /<t\b[^>]*>([\s\S]*?)<\/t>/g; let t;
+          while ((t = tre.exec(inner))) s += t[1];
+          val = xmlDecode(s);
+        } else {
+          const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
+          if (v) {
+            const raw = v[1];
+            if (type === 's') val = shared[parseInt(raw, 10)] ?? null;
+            else if (type === 'str') val = xmlDecode(raw);
+            else if (type === 'b') val = raw === '1';
+            else if (type === 'e') val = null;
+            else { const n = Number(raw); val = Number.isNaN(n) ? xmlDecode(raw) : n; }
+          }
+        }
+        row[ci] = val === undefined ? null : val;
+      }
+      rows[ri] = row;
+    }
+    let width = 0;
+    for (let i = 0; i < rows.length; i++) { if (!rows[i]) rows[i] = []; width = Math.max(width, rows[i].length); }
+    for (const r of rows) for (let i = 0; i < width; i++) if (r[i] === undefined) r[i] = null;
+    return rows;
+  }
+  async function readXlsx(buf) {
+    const zip = await unzip(buf);
+    const shared = parseSharedStrings(await zip.text('xl/sharedStrings.xml'));
+    const wbXml = (await zip.text('xl/workbook.xml')) || '';
+    const relXml = (await zip.text('xl/_rels/workbook.xml.rels')) || '';
+    const rels = {};
+    for (const m of relXml.matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+      const id = /\bId="([^"]+)"/.exec(m[1]); const tg = /\bTarget="([^"]+)"/.exec(m[1]);
+      if (id && tg) rels[id[1]] = tg[1];
+    }
+    const sheets = [];
+    for (const m of wbXml.matchAll(/<sheet\b([^>]*)\/?>/g)) {
+      const name = /\bname="([^"]*)"/.exec(m[1]);
+      const rid = /\br:id="([^"]+)"/.exec(m[1]);
+      let target = rid && rels[rid[1]] ? rels[rid[1]] : null;
+      if (target) target = target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
+      if (name && target) sheets.push({ name: xmlDecode(name[1]), path: target });
+    }
+    if (!sheets.length) {
+      zip.names.filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()
+        .forEach((p, i) => sheets.push({ name: 'Sheet' + (i + 1), path: p }));
+    }
+    if (!sheets.length) throw new Error('مفيش شيتات جوه الملف');
+    const out = [];
+    for (const s of sheets) {
+      const xml = await zip.text(s.path);
+      out.push({ name: s.name, rows: xml ? parseSheet(xml, shared) : [] });
+    }
+    return out;
+  }
+  function parseCsv(text) {
+    const rows = []; let row = [], cur = '', q = false;
+    text = text.replace(/^﻿/, '');
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cur); cur = ''; rows.push(row); row = [];
+      } else cur += ch;
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows.map(r => r.map(v => (v === '' ? null : (isFinite(v) && v.trim() !== '' && !/^0\d/.test(v.trim()) ? Number(v) : v))));
+  }
+  async function readFileToSheets(file) {
+    const name = (file.name || '').toLowerCase();
+    if (name.endsWith('.csv')) return [{ name: 'CSV', rows: parseCsv(await file.text()) }];
+    return readXlsx(await file.arrayBuffer());
+  }
+
+  /* ---------- Dates ---------- */
+  const pad = n => String(n).padStart(2, '0');
+  const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  /* returns ms (UTC-naive) or null. Excel serial numbers, ISO strings and DD/MM/YYYY are understood. */
+  function toDate(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return v > 20000 && v < 80000 ? Math.round((v - 25569) * 86400000) : null;
+    const s = String(v).trim();
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s);
+    if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
+    return null;
+  }
+  const fmtDate = ms => { const d = new Date(ms); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
+  const monthKey = ms => fmtDate(ms).slice(0, 7);
+  const monthLabel = k => { const [y, m] = k.split('-'); return MONTHS_AR[+m - 1] + ' ' + y; };
+  const excelSerial = ms => Math.floor(ms / 86400000) + 25569;
+
+  /* ---------- Column detection ---------- */
+  const norm = v => String(v ?? '').toLowerCase().trim();
+  function findHeaderRow(rows) {
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      if ((rows[i] || []).some(c => /barcode|باركود/i.test(String(c ?? '')))) return i;
+    }
+    return 0;
+  }
+  function firstMatch(headers, ...tests) {
+    const h = headers.map(norm);
+    for (const t of tests) { const i = h.findIndex(x => x && t.test(x)); if (i >= 0) return i; }
+    return -1;
+  }
+  function detectColumns(headers) {
+    const f = (...t) => firstMatch(headers, ...t);
+    return {
+      bar: f(/barcode/, /باركود/, /default code|internal reference|الكود|^code$/),
+      name: f(/product\/name|product name|اسم الصنف|اسم المنتج/, /^name$/, /name/),
+      qty: f(/quantity$/, /quantity/, /الكمية|^qty$/),
+      sub: f(/subtotal/, /الإجمالي|الاجمالي/),
+      dept: f(/department|dept|القسم|ديبارتمنت/),
+      ref: f(/order lines\/order ref/, /order ref/, /receipt|فاتورة/)
+    };
+  }
+  function detectStockColumns(headers) {
+    const f = (...t) => firstMatch(headers, ...t);
+    return {
+      bar: f(/barcode/, /باركود/, /default code|internal reference|الكود|^code$/),
+      name: f(/product\/name|product name|اسم الصنف|اسم المنتج/, /^name$/, /name/),
+      qty: f(/^quantity$/, /^qty$/, /on hand|الكمية/, /available quantity/, /quantity/),
+      date: f(/incoming|تاريخ الدخول|تاريخ دخول|received|دخول/, /last updated|updated on|آخر تحديث/, /date|تاريخ/),
+      dept: f(/department|dept|القسم|ديبارتمنت/),
+      loc: f(/location|مخزن|warehouse|فرع/)
+    };
+  }
+  /* A stock sheet has no Subtotal and carries location / available quantity / update-date columns. */
+  function isStockHeaders(headers) {
+    const j = headers.map(norm).join('|');
+    if (/subtotal|الإجمالي|الاجمالي/.test(j)) return false;
+    return /available quantity|location|last updated|on hand|incoming|مخزن|تاريخ الدخول/.test(j);
+  }
+
+  /* ---------- Analysis ---------- */
+  const SIZE_SET = new Set(['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', 'ONE SIZE', 'ONESIZE', 'FREE SIZE', 'FREESIZE']);
+  function stripSize(code) {
+    const s = String(code).trim();
+    const i = s.lastIndexOf('-');
+    if (i <= 0) return s;
+    const suf = s.slice(i + 1).trim().toUpperCase();
+    if (SIZE_SET.has(suf) || /^\d{1,3}$/.test(suf)) return s.slice(0, i).trim();
+    return s;
+  }
+  function deptFromName(name) {
+    const re = /\(+\s*([A-Za-z]{2,6})\s*\)/g;
+    let m, last = '';
+    while ((m = re.exec(String(name ?? '')))) last = m[1];
+    return last.toUpperCase();
+  }
+  const EXCLUDE_RE = /discount|shipping|delivery|خصم|شحن/i;
+  const UNKNOWN_DEPT = 'غير محدد';
+  const num = v => { const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : 0; };
+  const topKey = map => { let best = '', bc = -1; for (const [k, c] of map) if (c > bc) { best = k; bc = c; } return best; };
+  const topList = (map, n) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(e => e[0]);
+
+  function analyze(rows, headerRow, cols, opts) {
+    const stripSizes = !opts || opts.stripSize !== false;
+    const groups = new Map();
+    const branches = new Map();
+    let excluded = 0, skipped = 0, used = 0;
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const rawBar = row[cols.bar];
+      if (rawBar === null || rawBar === undefined || String(rawBar).trim() === '') { skipped++; continue; }
+      const name = cols.name >= 0 ? row[cols.name] : '';
+      if (name && EXCLUDE_RE.test(String(name))) { excluded++; continue; }
+      const raw = String(rawBar).trim();
+      const code = stripSizes ? stripSize(raw) : raw;
+      let g = groups.get(code);
+      if (!g) { g = { code, qty: 0, value: 0, names: new Map(), depts: new Map(), raws: new Set() }; groups.set(code, g); }
+      g.qty += num(row[cols.qty]);
+      if (cols.sub >= 0) g.value += num(row[cols.sub]);
+      g.raws.add(raw);
+      if (name) g.names.set(String(name), (g.names.get(String(name)) || 0) + 1);
+      const d = cols.dept >= 0 ? String(row[cols.dept] ?? '').trim() : deptFromName(name);
+      if (d) g.depts.set(d, (g.depts.get(d) || 0) + 1);
+      if (cols.ref >= 0 && row[cols.ref]) {
+        const b = String(row[cols.ref]).split('/')[0].trim();
+        if (b) branches.set(b, (branches.get(b) || 0) + 1);
+      }
+      used++;
+    }
+    const items = [];
+    for (const g of groups.values()) {
+      items.push({
+        code: g.code,
+        name: topKey(g.names),
+        dept: topKey(g.depts) || UNKNOWN_DEPT,
+        variants: g.raws.size,
+        qty: Math.round(g.qty * 1000) / 1000,
+        value: Math.round(g.value * 100) / 100
+      });
+    }
+    return { items, excluded, skipped, used, branches: topList(branches, 3) };
+  }
+
+  /* Stock sheet -> Map(code -> {code,name,dept,stock,entry}). entry = earliest date among the code's rows. */
+  function analyzeStock(rows, headerRow, cols, opts) {
+    const stripSizes = !opts || opts.stripSize !== false;
+    const map = new Map();
+    const locs = new Map();
+    let used = 0, skipped = 0, dated = 0;
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const rawBar = row[cols.bar];
+      if (rawBar === null || rawBar === undefined || String(rawBar).trim() === '') { skipped++; continue; }
+      const raw = String(rawBar).trim();
+      const code = stripSizes ? stripSize(raw) : raw;
+      let g = map.get(code);
+      if (!g) { g = { code, stock: 0, entry: null, names: new Map(), depts: new Map() }; map.set(code, g); }
+      g.stock += cols.qty >= 0 ? num(row[cols.qty]) : 0;
+      if (cols.date >= 0) {
+        const d = toDate(row[cols.date]);
+        if (d !== null) { dated++; if (g.entry === null || d < g.entry) g.entry = d; }
+      }
+      const name = cols.name >= 0 ? row[cols.name] : '';
+      if (name) g.names.set(String(name), (g.names.get(String(name)) || 0) + 1);
+      const dep = cols.dept >= 0 ? String(row[cols.dept] ?? '').trim() : deptFromName(name);
+      if (dep) g.depts.set(dep, (g.depts.get(dep) || 0) + 1);
+      if (cols.loc >= 0 && row[cols.loc]) { const l = String(row[cols.loc]).trim(); locs.set(l, (locs.get(l) || 0) + 1); }
+      used++;
+    }
+    const out = new Map();
+    for (const g of map.values()) {
+      out.set(g.code, { code: g.code, name: topKey(g.names), dept: topKey(g.depts), stock: Math.round(g.stock * 1000) / 1000, entry: g.entry });
+    }
+    return { map: out, used, skipped, dated, locations: topList(locs, 3) };
+  }
+
+  /* Sales items + stock -> one list. sold=false means "in stock with positive quantity but never in the sales sheet". */
+  function merge(salesItems, stock) {
+    const out = [];
+    const seen = new Set();
+    for (const s of salesItems) {
+      const st = stock ? stock.get(s.code) : null;
+      if (st) seen.add(s.code);
+      out.push({
+        code: s.code, name: s.name || (st ? st.name : ''),
+        dept: s.dept === UNKNOWN_DEPT && st && st.dept ? st.dept : s.dept,
+        variants: s.variants, qty: s.qty, value: s.value, sold: true,
+        stock: st ? st.stock : null, entry: st ? st.entry : null
+      });
+    }
+    const stats = { stockOnly: 0, noDept: 0, zeroStock: 0, matched: seen.size, stockCodes: stock ? stock.size : 0, salesCodes: salesItems.length };
+    if (stock) {
+      for (const [code, st] of stock) {
+        if (seen.has(code)) continue;
+        if (st.stock <= 0) { stats.zeroStock++; continue; }
+        if (!st.dept) { stats.noDept++; continue; } /* supplies such as bags and tags carry no department */
+        out.push({ code, name: st.name, dept: st.dept, variants: 0, qty: 0, value: 0, sold: false, stock: st.stock, entry: st.entry });
+        stats.stockOnly++;
+      }
+    }
+    return { items: out, stats };
+  }
+
+  /* filter = {depts:Set, months:Set, from:ms|null, to:ms|null}. Empty sets mean "all". */
+  function filterItems(items, f) {
+    const hasDept = f.depts && f.depts.size > 0, hasMonth = f.months && f.months.size > 0;
+    const from = f.from ?? null, to = f.to ?? null;
+    const timeActive = hasMonth || from !== null || to !== null;
+    let noDate = 0;
+    const out = [];
+    for (const i of items) {
+      if (hasDept && !f.depts.has(i.dept)) continue;
+      if (timeActive) {
+        if (i.entry === null || i.entry === undefined) { noDate++; continue; }
+        if (hasMonth && !f.months.has(monthKey(i.entry))) continue;
+        if (from !== null && i.entry < from) continue;
+        if (to !== null && i.entry > to) continue;
+      }
+      out.push(i);
+    }
+    return { items: out, noDate };
+  }
+
+  const byTop = (a, b) => b.qty - a.qty || b.value - a.value || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0);
+  const byBottom = (a, b) => a.qty - b.qty || a.value - b.value || (b.stock ?? 0) - (a.stock ?? 0) || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0);
+  /* scope: all | positive | plusUnsold | unsold  (what the "least sold" list is drawn from) */
+  function rank(items, n, { scope = 'all' } = {}) {
+    const sold = items.filter(i => i.sold);
+    let bottomPool;
+    if (scope === 'positive') bottomPool = sold.filter(i => i.qty > 0);
+    else if (scope === 'plusUnsold') bottomPool = items;
+    else if (scope === 'unsold') bottomPool = items.filter(i => !i.sold);
+    else bottomPool = sold;
+    const topSorted = sold.slice().sort(byTop);
+    const botSorted = bottomPool.slice().sort(byBottom);
+    const decorate = sorted => {
+      const c = new Map();
+      return sorted.map(i => { const k = (c.get(i.dept) || 0) + 1; c.set(i.dept, k); return Object.assign({}, i, { deptRank: k }); });
+    };
+    return { topPool: sold, bottomPool, topSorted, botSorted,
+      top: decorate(topSorted).slice(0, n), bottom: decorate(botSorted).slice(0, n) };
+  }
+
+  /* Per-department ("صنف") totals: pieces and value, with a rank for each. */
+  function categories(items) {
+    const m = new Map();
+    for (const i of items) {
+      let d = m.get(i.dept);
+      if (!d) { d = { dept: i.dept, soldCodes: 0, unsoldCodes: 0, qty: 0, value: 0, stock: 0 }; m.set(i.dept, d); }
+      if (i.sold) { d.soldCodes++; d.qty += i.qty; d.value += i.value; } else d.unsoldCodes++;
+      if (i.stock !== null && i.stock !== undefined) d.stock += i.stock;
+    }
+    const arr = [...m.values()];
+    for (const d of arr) { d.qty = Math.round(d.qty * 1000) / 1000; d.value = Math.round(d.value * 100) / 100; d.stock = Math.round(d.stock * 1000) / 1000; }
+    const totQty = arr.reduce((s, d) => s + d.qty, 0);
+    const cmp = k => (a, b) => b[k] - a[k] || b.qty - a.qty || (a.dept < b.dept ? -1 : 1);
+    const qr = new Map(arr.slice().sort(cmp('qty')).map((d, i) => [d.dept, i + 1]));
+    const vr = new Map(arr.slice().sort(cmp('value')).map((d, i) => [d.dept, i + 1]));
+    for (const d of arr) { d.qtyRank = qr.get(d.dept); d.valueRank = vr.get(d.dept); d.share = totQty > 0 ? d.qty / totQty : 0; }
+    return arr.sort(cmp('qty'));
+  }
+
+  /* ---------- XLSX writing ---------- */
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function zipStore(files) {
+    const chunks = [], central = []; let offset = 0;
+    const d = new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    for (const f of files) {
+      const name = te.encode(f.name), crc = crc32(f.data), size = f.data.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), name, f.data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true); ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), name);
+      offset += 30 + name.length + size;
+    }
+    const cdSize = central.reduce((s, c) => s + c.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    const all = [...chunks, ...central, new Uint8Array(end.buffer)];
+    const out = new Uint8Array(all.reduce((s, c) => s + c.length, 0));
+    let p = 0; for (const c of all) { out.set(c, p); p += c.length; }
+    return out;
+  }
+  function colName(i) { let s = '', n = i + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+  const STYLE_OF = { text: 2, int: 3, dec: 4, date: 5, pct: 6 };
+  /* sheet: {name, head:[...], rows:[[...]], types:['text'|'int'|'dec'|'date'|'pct'], widths:[...]} */
+  function sheetXml(sh) {
+    const nc = sh.head.length, nr = sh.rows.length;
+    let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      `<dimension ref="A1:${colName(nc - 1)}${nr + 1}"/>` +
+      '<sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '<sheetFormatPr defaultRowHeight="15"/><cols>' +
+      sh.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('') +
+      '</cols><sheetData>';
+    x += '<row r="1" ht="30" customHeight="1">' + sh.head.map((h, i) =>
+      `<c r="${colName(i)}1" s="1" t="inlineStr"><is><t>${xmlEscape(h)}</t></is></c>`).join('') + '</row>';
+    for (let r = 0; r < nr; r++) {
+      const row = sh.rows[r], rn = r + 2;
+      x += `<row r="${rn}">`;
+      for (let c = 0; c < nc; c++) {
+        const v = row[c], ref = colName(c) + rn, t = sh.types[c];
+        if (v === null || v === undefined || v === '') { x += `<c r="${ref}" s="2"/>`; continue; }
+        if (t === 'text') x += `<c r="${ref}" s="2" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(v)}</t></is></c>`;
+        else x += `<c r="${ref}" s="${STYLE_OF[t]}"><v>${Number(v)}</v></c>`;
+      }
+      x += '</row>';
+    }
+    x += '</sheetData>';
+    if (nr > 0) x += `<autoFilter ref="A1:${colName(nc - 1)}${nr + 1}"/>`;
+    return x + '</worksheet>';
+  }
+  function safeSheetName(name, used) {
+    let base = String(name).replace(/[\\\/?*\[\]:]/g, '-').trim().slice(0, 31) || 'Sheet';
+    let n = base, k = 2;
+    while (used.has(n.toLowerCase())) { const suf = ' (' + k++ + ')'; n = base.slice(0, 31 - suf.length) + suf; }
+    used.add(n.toLowerCase());
+    return n;
+  }
+  function buildXlsx(sheets) {
+    const used = new Set();
+    const names = sheets.map(s => safeSheetName(s.name, used));
+    const files = [];
+    const add = (name, text) => files.push({ name, data: te.encode(text) });
+    add('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+      '</Types>');
+    add('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+    add('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<bookViews><workbookView activeTab="0"/></bookViews><sheets>' +
+      names.map((n, i) => `<sheet name="${xmlEscape(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
+      '</sheets></workbook>');
+    add('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+      `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+    const xfAlign = '<alignment horizontal="center" vertical="center"/>';
+    add('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd"/></numFmts>' +
+      '<fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts>' +
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+      '<border><left style="thin"><color rgb="FFB7B7B7"/></left><right style="thin"><color rgb="FFB7B7B7"/></right><top style="thin"><color rgb="FFB7B7B7"/></top><bottom style="thin"><color rgb="FFB7B7B7"/></bottom><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="7">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+      `<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">${xfAlign}</xf>` +
+      `<xf numFmtId="3" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">${xfAlign}</xf>` +
+      `<xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">${xfAlign}</xf>` +
+      `<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">${xfAlign}</xf>` +
+      `<xf numFmtId="10" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">${xfAlign}</xf>` +
+      '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+    sheets.forEach((s, i) => add(`xl/worksheets/sheet${i + 1}.xml`, sheetXml(s)));
+    return zipStore(files);
+  }
+
+  /* ---------- Workbook layouts used by the tool ---------- */
+  const HEAD = ['الترتيب', 'كود المنتج', 'اسم الصنف', 'القسم', 'الترتيب داخل القسم', 'تاريخ الدخول', 'عدد المقاسات المباعة', 'إجمالي الكمية (صافي)', 'إجمالي القيمة', 'الاستوك الحالي', 'الحالة'];
+  const TYPES = ['int', 'text', 'text', 'text', 'int', 'date', 'int', 'int', 'dec', 'int', 'text'];
+  const WIDTHS = [9, 16, 38, 12, 14, 14, 14, 18, 16, 14, 22];
+  const status = r => (!r.sold ? 'غير مباع (موجود في الاستوك)' : r.qty <= 0 ? 'مرتجع / صافي صفر' : 'مباع');
+  const listRows = (list, kind) => list.map((r, i) => (kind ? [kind] : []).concat([
+    i + 1, r.code, r.name, r.dept, r.deptRank ?? null, r.entry !== null && r.entry !== undefined ? excelSerial(r.entry) : null,
+    r.sold ? r.variants : null, r.qty, r.value, r.stock ?? null, status(r)]));
+  const plainSheet = (name, list) => ({ name, head: HEAD, rows: listRows(list), types: TYPES, widths: WIDTHS });
+  const kindSheet = (name, top, bottom) => ({
+    name, head: ['النوع'].concat(HEAD), types: ['text'].concat(TYPES), widths: [13].concat(WIDTHS),
+    rows: listRows(top, 'الأكثر مبيعاً').concat(listRows(bottom, 'الأقل مبيعاً'))
+  });
+  function categorySheet(items, name) {
+    const cats = categories(items);
+    return {
+      name: name || 'تحليل الأصناف',
+      head: ['الترتيب بالكمية', 'الصنف (القسم)', 'أكواد مباعة', 'أكواد استوك متباعتش', 'إجمالي الكمية (صافي)', 'نسبة الكمية', 'إجمالي القيمة', 'الترتيب بالقيمة', 'الاستوك الحالي'],
+      types: ['int', 'text', 'int', 'int', 'int', 'pct', 'dec', 'int', 'int'],
+      widths: [14, 16, 14, 18, 20, 13, 18, 14, 14],
+      rows: cats.map(d => [d.qtyRank, d.dept, d.soldCodes, d.unsoldCodes, d.qty, d.share, d.value, d.valueRank, d.stock])
+    };
+  }
+  function buildCurrentWorkbook(items, n, opts) {
+    const r = rank(items, n, opts);
+    const unsold = items.filter(i => !i.sold).sort((a, b) => (b.stock ?? 0) - (a.stock ?? 0) || (a.code < b.code ? -1 : 1))
+      .map(i => Object.assign({}, i, { deptRank: null }));
+    const sheets = [plainSheet('الأكثر مبيعاً', r.top), plainSheet('الأقل مبيعاً', r.bottom), categorySheet(items)];
+    if (unsold.length) sheets.push(plainSheet('استوك متباعتش', unsold));
+    sheets.push(plainSheet('كل الأكواد', items.slice().sort(byTop).map(i => Object.assign({}, i, { deptRank: null }))));
+    return buildXlsx(sheets);
+  }
+  function buildAllDeptsWorkbook(items, n, opts) {
+    const g = rank(items, n, opts);
+    const depts = categories(items).map(d => d.dept);
+    const sheets = [categorySheet(items, 'ملخص الأصناف'), plainSheet('الأكثر - المحدد كله', g.top), plainSheet('الأقل - المحدد كله', g.bottom)];
+    for (const d of depts) {
+      const r = rank(items.filter(i => i.dept === d), n, opts);
+      sheets.push(kindSheet(d, r.top, r.bottom));
+    }
+    sheets.push(plainSheet('كل الأكواد', items.slice().sort(byTop).map(i => Object.assign({}, i, { deptRank: null }))));
+    return buildXlsx(sheets);
+  }
+
+  return { readXlsx, readFileToSheets, parseCsv, findHeaderRow, detectColumns, detectStockColumns, isStockHeaders,
+    analyze, analyzeStock, merge, filterItems, rank, categories, stripSize, deptFromName, toDate, fmtDate, monthKey, monthLabel,
+    buildXlsx, buildCurrentWorkbook, buildAllDeptsWorkbook, UNKNOWN_DEPT };
+})();
+
+
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pct = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const state = { sales: null, stock: null, salesRes: null, stockRes: null, all: null, mstats: null, catBy: 'qty', catDesc: true };
+
+  /* ---------- theme ---------- */
+  const root = document.documentElement;
+  const isDark = () => root.getAttribute('data-theme') !== 'light';
+  function paintThemeBtn() { $('themeBtn').textContent = isDark() ? 'الوضع النهاري' : 'الوضع الليلي'; }
+  $('themeBtn').addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    paintThemeBtn();
+  });
+  paintThemeBtn();
+
+  /* ---------- messages ---------- */
+  let toastTimer;
+  function toast(text) {
+    const t = $('toast'); t.textContent = text; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+  }
+  const notes = new Map();
+  function setNote(key, text, kind) { if (text) notes.set(key, { text, kind }); else notes.delete(key); paintNotes(); }
+  function paintNotes() {
+    $('msgs').innerHTML = [...notes.values()].map(n => `<div class="notice${n.kind === 'err' ? ' err' : ''}">${esc(n.text)}</div>`).join('');
+  }
+
+  /* ---------- multi-select ---------- */
+  function MultiSelect(host, { allText, noun, onChange }) {
+    host.innerHTML = `<div class="ms"><button type="button" class="ms-btn" aria-haspopup="true" aria-expanded="false"><span class="ms-sum"></span><span aria-hidden="true">▾</span></button>` +
+      `<div class="ms-panel" hidden><input type="search" placeholder="بحث" aria-label="بحث في القايمة"><div class="ms-tools"><button type="button" class="btn sm" data-a="vis">تحديد المعروض</button><button type="button" class="btn sm" data-a="none">مسح الاختيار</button></div><div class="ms-list"></div></div></div>`;
+    const btn = host.querySelector('.ms-btn'), panel = host.querySelector('.ms-panel'), list = host.querySelector('.ms-list'), search = host.querySelector('input');
+    let options = [], selected = new Set();
+    const sum = () => {
+      const s = btn.querySelector('.ms-sum');
+      const labels = options.filter(o => selected.has(o.value)).map(o => o.label);
+      s.textContent = !labels.length ? allText : labels.length <= 2 ? labels.join('، ') : labels.length + ' ' + noun;
+      btn.classList.toggle('has', labels.length > 0);
+    };
+    const paint = () => {
+      const q = search.value.trim().toLowerCase();
+      const vis = options.filter(o => !q || o.label.toLowerCase().includes(q));
+      list.innerHTML = vis.length ? vis.map(o => `<label><input type="checkbox" value="${esc(o.value)}"${selected.has(o.value) ? ' checked' : ''}><span>${esc(o.label)}</span><span class="ct">${esc(o.count ?? '')}</span></label>`).join('') : '<div class="ms-empty">مفيش نتايج</div>';
+      host._vis = vis;
+    };
+    const open = v => { panel.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { search.value = ''; paint(); search.focus(); } };
+    btn.addEventListener('click', () => open(panel.hidden));
+    document.addEventListener('mousedown', e => { if (!panel.hidden && !host.contains(e.target)) open(false); });
+    host.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) { open(false); btn.focus(); } });
+    search.addEventListener('input', paint);
+    list.addEventListener('change', e => {
+      const cb = e.target; if (cb.type !== 'checkbox') return;
+      if (cb.checked) selected.add(cb.value); else selected.delete(cb.value);
+      sum(); onChange();
+    });
+    panel.addEventListener('click', e => {
+      const a = e.target.closest('[data-a]'); if (!a) return;
+      if (a.dataset.a === 'none') selected.clear(); else (host._vis || []).forEach(o => selected.add(o.value));
+      paint(); sum(); onChange();
+    });
+    return {
+      setOptions(opts) { options = opts; selected = new Set([...selected].filter(v => opts.some(o => o.value === v))); sum(); if (!panel.hidden) paint(); },
+      get() { return new Set(selected); }
+    };
+  }
+  const msDept = MultiSelect($('msDept'), { allText: 'كل الأقسام', noun: 'أقسام', onChange: () => render() });
+  const msMonth = MultiSelect($('msMonth'), { allText: 'كل الشهور', noun: 'شهور', onChange: () => render() });
+
+  /* ---------- loading ---------- */
+  const hasBarcode = s => s.rows.slice(0, 10).some(r => (r || []).some(c => /barcode|باركود/i.test(String(c ?? ''))));
+  async function ingest(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const errs = [];
+    for (const file of files) {
+      try {
+        const sheets = await Core.readFileToSheets(file);
+        const pick = sheets.find(s => s.rows.length && hasBarcode(s)) || sheets.find(s => s.rows.length);
+        if (!pick) throw new Error('الملف فاضي');
+        const hr = Core.findHeaderRow(pick.rows);
+        const headers = (pick.rows[hr] || []).map(h => (h === null || h === undefined ? '' : String(h)));
+        const base = { rows: pick.rows, hr, headers, fileName: file.name };
+        if (Core.isStockHeaders(headers)) state.stock = Object.assign(base, { cols: Core.detectStockColumns(headers) });
+        else state.sales = Object.assign(base, { cols: Core.detectColumns(headers) });
+      } catch (e) { errs.push(file.name + ': ' + e.message); }
+    }
+    setNote('read', errs.length ? 'مقدرتش أقرا: ' + errs.join(' | ') : '', 'err');
+    if (!state.sales) {
+      setNote('need', state.stock ? 'ملف الاستوك اتقرا. ضيف شيت المبيعات عشان يبدأ التحليل.' : '');
+      return;
+    }
+    setNote('need', '');
+    $('drop').hidden = true; $('app').hidden = false;
+    fillMapSelects();
+    runAnalysis(true);
+  }
+  function fillMapSelects() {
+    const opt = (headers, none) => (none ? [`<option value="-1">${none}</option>`] : [])
+      .concat(headers.map((h, i) => `<option value="${i}">${esc(h || ('عمود ' + (i + 1)))}</option>`)).join('');
+    const S = state.sales;
+    $('selBar').innerHTML = opt(S.headers, '— اختار —'); $('selQty').innerHTML = opt(S.headers, '— اختار —');
+    $('selName').innerHTML = opt(S.headers, '— مفيش —'); $('selSub').innerHTML = opt(S.headers, '— مفيش —');
+    $('selDept').innerHTML = opt(S.headers, 'من اسم الصنف (تلقائي)');
+    $('selBar').value = S.cols.bar; $('selQty').value = S.cols.qty; $('selName').value = S.cols.name; $('selSub').value = S.cols.sub; $('selDept').value = S.cols.dept;
+    const T = state.stock;
+    $('stockMap').hidden = !T;
+    if (T) {
+      $('stBar').innerHTML = opt(T.headers, '— اختار —'); $('stQty').innerHTML = opt(T.headers, '— اختار —');
+      $('stName').innerHTML = opt(T.headers, '— مفيش —'); $('stDate').innerHTML = opt(T.headers, '— مفيش تاريخ —');
+      $('stDept').innerHTML = opt(T.headers, 'من اسم الصنف (تلقائي)');
+      $('stBar').value = T.cols.bar; $('stQty').value = T.cols.qty; $('stName').value = T.cols.name; $('stDate').value = T.cols.date; $('stDept').value = T.cols.dept;
+    }
+  }
+  function readMaps() {
+    Object.assign(state.sales.cols, { bar: +$('selBar').value, name: +$('selName').value, qty: +$('selQty').value, sub: +$('selSub').value, dept: +$('selDept').value });
+    if (state.stock) Object.assign(state.stock.cols, { bar: +$('stBar').value, name: +$('stName').value, qty: +$('stQty').value, date: +$('stDate').value, dept: +$('stDept').value });
+  }
+  function runAnalysis(fresh) {
+    readMaps();
+    const S = state.sales;
+    if (S.cols.bar < 0 || S.cols.qty < 0) {
+      $('mapBox').open = true;
+      setNote('map', 'مقدرتش أعرف عمود الكود أو الكمية في شيت المبيعات. اختارهم من قايمة الأعمدة تحت.', 'err');
+      state.all = null; renderEmpty(); return;
+    }
+    setNote('map', '');
+    const strip = $('stripSize').checked;
+    state.salesRes = Core.analyze(S.rows, S.hr, S.cols, { stripSize: strip });
+    let stockMap = null; state.stockRes = null;
+    const T = state.stock;
+    if (T && T.cols.bar >= 0) { state.stockRes = Core.analyzeStock(T.rows, T.hr, T.cols, { stripSize: strip }); stockMap = state.stockRes.map; }
+    const m = Core.merge(state.salesRes.items, stockMap);
+    state.all = m.items; state.mstats = m.stats;
+    if (!state.all.length) { setNote('map', 'مفيش صفوف فيها كود منتج في العمود المختار.', 'err'); renderEmpty(); return; }
+    const hasStock = !!state.stockRes;
+    [...$('scope').options].forEach(o => { if (o.dataset.stock !== undefined) o.disabled = !hasStock; });
+    if (!hasStock && /unsold|plusUnsold/i.test($('scope').value)) $('scope').value = 'all';
+    if (hasStock && fresh) $('scope').value = 'plusUnsold';
+    $('stockState').textContent = hasStock ? T.fileName : 'غير مضاف';
+    $('stockState').classList.toggle('on', hasStock);
+    $('stockClear').hidden = !hasStock;
+    $('salesState').textContent = S.fileName;
+    stockNotes();
+    fillFilters();
+    render();
+  }
+  function stockNotes() {
+    const T = state.stock, R = state.stockRes;
+    let text = '';
+    if (R) {
+      const dc = T.cols.date >= 0 ? T.headers[T.cols.date] : '';
+      if (T.cols.date < 0 || !R.dated) text = 'شيت الاستوك مفيهوش عمود تاريخ، فمفيش تاريخ دخول وفلاتر الشهور والتواريخ مش هتشتغل. اختار عمود التاريخ من قايمة الأعمدة لو موجود.';
+      else if (/updated|تحديث/i.test(dc)) text = `عمود التاريخ المستخدم هو "${dc}" (آخر تحديث للسجل) وليس تاريخ دخول حقيقي. الصنف اللي اتحرك مؤخراً ممكن يظهر بتاريخ حديث. التاريخ المعروض لكل كود هو أقدم تاريخ بين مقاساته. لو عندك عمود Incoming Date ابعت شيت فيه.`;
+    }
+    setNote('date', text);
+    const s = state.mstats;
+    setNote('branch', R && R.locations.length && state.salesRes.branches.length
+      ? `فرع/فروع شيت المبيعات: ${state.salesRes.branches.join(' / ')} · مخزن الاستوك: ${R.locations.join(' / ')}. "غير مباع" معناها ما اتباعش في شيت المبيعات ده، فاتأكد إن الاتنين لنفس الفرع.` : '');
+    setNote('match', R && s.salesCodes && s.matched / s.salesCodes < 0.4
+      ? `أقل من 40% من أكواد المبيعات موجودة في الاستوك (${nf.format(s.matched)} من ${nf.format(s.salesCodes)}). اتأكد إن الشيتين لنفس الفرع.` : '');
+  }
+  function fillFilters() {
+    const cnt = new Map(), mon = new Map();
+    for (const i of state.all) {
+      cnt.set(i.dept, (cnt.get(i.dept) || 0) + 1);
+      if (i.entry !== null && i.entry !== undefined) { const k = Core.monthKey(i.entry); mon.set(k, (mon.get(k) || 0) + 1); }
+    }
+    msDept.setOptions([...cnt.entries()].sort((a, b) => (a[0] === Core.UNKNOWN_DEPT) - (b[0] === Core.UNKNOWN_DEPT) || (a[0] < b[0] ? -1 : 1))
+      .map(([d, c]) => ({ value: d, label: d, count: nf.format(c) })));
+    msMonth.setOptions([...mon.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([k, c]) => ({ value: k, label: Core.monthLabel(k), count: nf.format(c) })));
+    const hasDates = mon.size > 0;
+    ['dFrom', 'dTo'].forEach(id => { $(id).disabled = !hasDates; });
+    $('msMonth').querySelector('.ms-btn').disabled = !hasDates;
+  }
+
+  /* ---------- rendering ---------- */
+  const getN = () => { let n = parseInt($('n').value, 10); if (!Number.isFinite(n) || n < 1) n = 1; return Math.min(n, 1000); };
+  const dateMs = v => (v ? Date.UTC(+v.slice(0, 4), +v.slice(5, 7) - 1, +v.slice(8, 10)) : null);
+  function filter() {
+    const from = dateMs($('dFrom').value), to = dateMs($('dTo').value);
+    return { depts: msDept.get(), months: msMonth.get(), from, to: to === null ? null : to + 86400000 - 1 };
+  }
+  function tableHtml(list, kind, maxQty, hasStock) {
+    if (!list.length) return '<tbody><tr><td class="empty">مفيش أكواد تطابق الفلتر ده.</td></tr></tbody>';
+    const head = '<thead><tr><th>#</th><th>كود المنتج</th><th>اسم الصنف</th><th>القسم</th>' + (hasStock ? '<th>تاريخ الدخول</th>' : '') +
+      '<th title="صافي بعد خصم المرتجعات">الكمية</th><th>القيمة</th>' + (hasStock ? '<th>الاستوك</th>' : '') + '</tr></thead>';
+    const body = list.map((r, i) => {
+      const neg = r.qty < 0;
+      const w = kind === 'top' && maxQty > 0 && r.qty > 0 ? Math.max(2, Math.round(r.qty / maxQty * 100)) : 0;
+      return `<tr><td class="rk n">${i + 1}</td><td class="code">${esc(r.code)}</td><td class="nm" title="${esc(r.name)}">${esc(r.name)}</td>` +
+        `<td>${esc(r.dept)}<small class="dr" title="${kind === 'top' ? 'ترتيبه بين أكواد قسمه من الأعلى مبيعاً' : 'ترتيبه بين أكواد قسمه من الأقل مبيعاً'}">#${r.deptRank}</small></td>` +
+        (hasStock ? `<td class="n dt">${r.entry !== null && r.entry !== undefined ? Core.fmtDate(r.entry) : '—'}</td>` : '') +
+        `<td class="q n${neg ? ' neg' : ''}" style="--w:${w}%"><span>${nf.format(r.qty)}</span>${r.sold ? '' : '<em class="tag">غير مباع</em>'}</td>` +
+        `<td class="n">${money.format(r.value)}</td>` + (hasStock ? `<td class="n">${r.stock === null || r.stock === undefined ? '—' : nf.format(r.stock)}</td>` : '') + '</tr>';
+    }).join('');
+    return head + '<tbody>' + body + '</tbody>';
+  }
+  function tieNote(el, shown, sortedPool) {
+    el.hidden = true;
+    if (!shown.length) return;
+    const last = shown[shown.length - 1].qty;
+    const extra = sortedPool.filter(i => i.qty === last).length - shown.filter(i => i.qty === last).length;
+    if (extra > 0) {
+      el.textContent = `فيه ${nf.format(extra)} كود تانيين بنفس الكمية الأخيرة (${nf.format(last)}) مش ظاهرين. الترتيب بين المتعادلين بالقيمة ثم الاستوك الأكبر ثم الكود.`;
+      el.hidden = false;
+    }
+  }
+  function renderEmpty() {
+    ['stats', 'tTop', 'tBot', 'tCat', 'catHl', 'meta'].forEach(id => { $(id).innerHTML = ''; });
+    $('tieTop').hidden = $('tieBot').hidden = true;
+    $('btnCur').disabled = $('btnAll').disabled = true;
+  }
+  function render() {
+    if (!state.all) return;
+    const f = filter(), n = getN(), scope = $('scope').value;
+    const hasStock = !!state.stockRes;
+    const { items, noDate } = Core.filterItems(state.all, f);
+    const r = Core.rank(items, n, { scope });
+    const S = state.salesRes, ms = state.mstats;
+
+    const sel = f.depts.size ? [...f.depts].join('، ') : 'كل الأقسام';
+    const parts = [`<span class="file">${esc(state.sales.fileName)}</span>`, `<span>الصفوف المحسوبة <b>${nf.format(S.used)}</b></span>`];
+    if (S.excluded) parts.push(`<span>مستبعد (خصومات/شحن) <b>${nf.format(S.excluded)}</b></span>`);
+    if (S.skipped) parts.push(`<span>صفوف بدون كود <b>${nf.format(S.skipped)}</b></span>`);
+    if (S.branches.length) parts.push(`<span>فرع المبيعات <span class="ltr">${esc(S.branches.join(' / '))}</span></span>`);
+    if (hasStock) {
+      const R = state.stockRes;
+      if (R.locations.length) parts.push(`<span>مخزن الاستوك <span class="ltr">${esc(R.locations.join(' / '))}</span></span>`);
+      parts.push(`<span>أكواد مبيعات موجودة في الاستوك <b>${nf.format(ms.matched)}</b> من <b>${nf.format(ms.salesCodes)}</b></span>`);
+      if (ms.noDept) parts.push(`<span>أصناف استوك بدون قسم (مستلزمات) مستبعدة <b>${nf.format(ms.noDept)}</b></span>`);
+    }
+    if (noDate && (f.months.size || f.from !== null || f.to !== null)) parts.push(`<span>أكواد بدون تاريخ دخول مستبعدة من الفلتر الزمني <b>${nf.format(noDate)}</b></span>`);
+    $('meta').innerHTML = parts.join('');
+
+    const sold = r.topPool;
+    const totQty = sold.reduce((s, i) => s + i.qty, 0), totVal = sold.reduce((s, i) => s + i.value, 0);
+    const tiles = [['عدد الأكواد المباعة', nf.format(sold.length)], ['صافي الكمية المباعة', nf.format(totQty)], ['إجمالي القيمة', money.format(totVal)],
+      ['عدد الأقسام', nf.format(new Set(items.map(i => i.dept)).size)]];
+    if (hasStock) {
+      tiles.push(['إجمالي الاستوك الحالي', nf.format(items.reduce((s, i) => s + (i.stock || 0), 0))]);
+      tiles.push(['أكواد استوك متباعتش', nf.format(items.filter(i => !i.sold).length)]);
+    }
+    $('stats').innerHTML = tiles.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+
+    $('hTop').textContent = `أعلى ${nf.format(r.top.length)} كود مبيعاً`;
+    $('hBot').textContent = `أقل ${nf.format(r.bottom.length)} كود مبيعاً`;
+    const sub = sel + (f.months.size ? ' · ' + [...f.months].sort().map(Core.monthLabel).join('، ') : '');
+    $('subTop').textContent = sub; $('subBot').textContent = sub;
+    $('tTop').innerHTML = tableHtml(r.top, 'top', r.top.length ? r.top[0].qty : 0, hasStock);
+    $('tBot').innerHTML = tableHtml(r.bottom, 'bottom', 0, hasStock);
+    tieNote($('tieTop'), r.top, r.topSorted);
+    tieNote($('tieBot'), r.bottom, r.botSorted);
+    renderCats(items, hasStock);
+    $('btnCur').disabled = $('btnAll').disabled = false;
+    document.querySelectorAll('#chips .chip').forEach(c => c.setAttribute('aria-pressed', String(+c.dataset.n === n)));
+  }
+  function renderCats(items, hasStock) {
+    const cats = Core.categories(items);
+    const withSales = cats.filter(c => c.soldCodes > 0);
+    const pick = (arr, k, max) => arr.slice().sort((a, b) => (max ? b[k] - a[k] : a[k] - b[k]) || (a.dept < b.dept ? -1 : 1))[0];
+    const tile = (title, c, text) => `<div class="stat"><div class="k">${title}</div><div class="v">${c ? esc(c.dept) : '—'}</div><div class="s">${c ? text(c) : ''}</div></div>`;
+    $('catHl').innerHTML = withSales.length
+      ? tile('أكثر صنف بالكمية', pick(withSales, 'qty', true), c => nf.format(c.qty) + ' قطعة') +
+        tile('أقل صنف بالكمية', pick(withSales, 'qty', false), c => nf.format(c.qty) + ' قطعة') +
+        tile('أكثر صنف بالقيمة', pick(withSales, 'value', true), c => money.format(c.value)) +
+        tile('أقل صنف بالقيمة', pick(withSales, 'value', false), c => money.format(c.value))
+      : '';
+    const by = state.catBy, desc = state.catDesc;
+    const sorted = cats.slice().sort((a, b) => (desc ? b[by] - a[by] : a[by] - b[by]) || (a.dept < b.dept ? -1 : 1));
+    const maxQ = Math.max(0, ...cats.map(c => c.qty)), maxV = Math.max(0, ...cats.map(c => c.value));
+    if (!sorted.length) { $('tCat').innerHTML = '<tbody><tr><td class="empty">مفيش بيانات تطابق الفلتر ده.</td></tr></tbody>'; return; }
+    const head = '<thead><tr><th>#</th><th>الصنف (القسم)</th><th>أكواد مباعة</th>' + (hasStock ? '<th>أكواد استوك متباعتش</th>' : '') +
+      '<th>الكمية</th><th>القيمة</th><th>نسبة الكمية</th><th>ترتيب بالكمية</th><th>ترتيب بالقيمة</th>' + (hasStock ? '<th>الاستوك</th>' : '') + '</tr></thead>';
+    const body = sorted.map((c, i) => {
+      const wq = maxQ > 0 && c.qty > 0 ? Math.max(2, Math.round(c.qty / maxQ * 100)) : 0;
+      const wv = maxV > 0 && c.value > 0 ? Math.max(2, Math.round(c.value / maxV * 100)) : 0;
+      return `<tr><td class="rk n">${i + 1}</td><td class="cat">${esc(c.dept)}</td><td class="n">${nf.format(c.soldCodes)}</td>` + (hasStock ? `<td class="n">${nf.format(c.unsoldCodes)}</td>` : '') +
+        `<td class="q n${c.qty < 0 ? ' neg' : ''}" style="--w:${wq}%"><span>${nf.format(c.qty)}</span></td>` +
+        `<td class="q n${c.value < 0 ? ' neg' : ''}" style="--w:${wv}%"><span>${money.format(c.value)}</span></td>` +
+        `<td class="n shr">${pct.format(c.share)}</td><td class="n">${c.qtyRank}</td><td class="n">${c.valueRank}</td>` + (hasStock ? `<td class="n">${nf.format(c.stock)}</td>` : '') + '</tr>';
+    }).join('');
+    $('tCat').innerHTML = head + '<tbody>' + body + '</tbody>';
+    $('catDir').textContent = desc ? 'الأكثر أولاً' : 'الأقل أولاً';
+  }
+
+  /* ---------- download ---------- */
+  function download(bytes, name) {
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  function fileTag() {
+    const d = [...msDept.get()];
+    const t = d.length === 0 ? 'كل_الأقسام' : d.length <= 3 ? d.join('_') : d.length + '_أقسام';
+    return t + '_' + getN();
+  }
+  function exportWith(builder, label) {
+    if (!state.all) return;
+    try {
+      const { items } = Core.filterItems(state.all, filter());
+      download(builder(items, getN(), { scope: $('scope').value }), label());
+      toast('تم تجهيز ملف Excel');
+    } catch (e) { setNote('export', 'حصلت مشكلة وأنا بجهّز الملف: ' + e.message, 'err'); }
+  }
+  $('btnCur').addEventListener('click', () => exportWith(Core.buildCurrentWorkbook, () => `تحليل_المبيعات_${fileTag()}.xlsx`));
+  $('btnAll').addEventListener('click', () => exportWith(Core.buildAllDeptsWorkbook, () => `تحليل_المبيعات_شيت_لكل_قسم_${fileTag()}.xlsx`));
+
+  /* ---------- events ---------- */
+  ['file', 'fileStock', 'fileSales'].forEach(id => $(id).addEventListener('change', e => { ingest(e.target.files); e.target.value = ''; }));
+  $('stockClear').addEventListener('click', () => { state.stock = null; fillMapSelects(); runAnalysis(true); });
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  document.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) ingest(e.dataTransfer.files); });
+  $('chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; $('n').value = c.dataset.n; render(); });
+  ['n', 'dFrom', 'dTo'].forEach(id => $(id).addEventListener('input', render));
+  $('scope').addEventListener('change', render);
+  $('stripSize').addEventListener('change', () => runAnalysis(false));
+  ['selBar', 'selName', 'selQty', 'selSub', 'selDept', 'stBar', 'stName', 'stQty', 'stDate', 'stDept'].forEach(id => $(id).addEventListener('change', () => runAnalysis(false)));
+  $('catBy').addEventListener('change', () => { state.catBy = $('catBy').value; render(); });
+  $('catDir').addEventListener('click', () => { state.catDesc = !state.catDesc; render(); });
+  const tabs = { tabCodes: 'viewCodes', tabCats: 'viewCats' };
+  Object.keys(tabs).forEach(t => $(t).addEventListener('click', () => {
+    Object.entries(tabs).forEach(([tb, v]) => { $(tb).setAttribute('aria-selected', String(tb === t)); $(v).hidden = tb !== t; });
+  }));
+  window.__sales = { state, ingest };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مدقق المرتجعات</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* layout concept: a self-serve audit console — upload zone up top collapses into a slim status bar once a file is loaded, report unfolds below in a dashboard of scorecards, a sortable ledger table, and policy evidence panels */
+:root{
+  --bg:#f3f2ee; --surface:#ffffff; --surface-2:#faf9f6; --border:#e2dfd6;
+  --text:#211f1a; --muted:#746f61; --accent:#2f5745; --accent-soft:#e3ede7;
+  --good:#2f7a4f; --good-bg:#e6f3ea; --bad:#b1402a; --bad-bg:#fbeae6; --warn:#a2701c; --warn-bg:#f8edda;
+  --mono:'JetBrains Mono',ui-monospace,monospace; --display:'Cairo',system-ui,sans-serif; --body:'Cairo',system-ui,sans-serif;
+  --shadow:0 1px 2px rgba(33,31,26,.06), 0 8px 24px -16px rgba(33,31,26,.18);
+  /* per-module identity colors */
+  --m-policy:#2f6f6b; --m-recon:#51607a; --m-table:#2f5745; --m-a:#b1402a; --m-b:#a24f1c;
+  --m-c:#766a52; --m-c2:#3d7a6e; --m-d:#a2701c; --m-e:#8a3a6b; --m-f:#2f6f3d; --m-g:#9c3b3b; --m-items:#6246a3; --m-customers:#2a5fa5; --m-time:#1f7a8c; --m-quality:#5c5648;
+  --glow1:rgba(47,87,69,.09); --glow2:rgba(98,70,163,.07); --glow3:rgba(42,95,165,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15141f; --surface:#1e1c18; --surface-2:#242220; --border:#38352e;
+    --text:#ece9e1; --muted:#a39d8c; --accent:#8fc9ac; --accent-soft:#223229;
+    --good:#7bc99b; --good-bg:#1b2e22; --bad:#e2887a; --bad-bg:#352120; --warn:#e0b267; --warn-bg:#352c19;
+    --m-policy:#6fc6bf; --m-recon:#9fb0d6; --m-table:#8fc9ac; --m-a:#e2887a; --m-b:#e3a570;
+    --m-c:#c9bba0; --m-c2:#7fd0bf; --m-d:#e0b267; --m-e:#e08fc4; --m-f:#8fd4a0; --m-g:#e2a0a0; --m-items:#b49bea; --m-customers:#8db5ef; --m-time:#7fd4e3; --m-quality:#c9c2ab;
+    --glow1:rgba(143,201,172,.08); --glow2:rgba(180,155,234,.07); --glow3:rgba(141,181,239,.06);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15141f; --surface:#1e1c18; --surface-2:#242220; --border:#38352e;
+  --text:#ece9e1; --muted:#a39d8c; --accent:#8fc9ac; --accent-soft:#223229;
+  --good:#7bc99b; --good-bg:#1b2e22; --bad:#e2887a; --bad-bg:#352120; --warn:#e0b267; --warn-bg:#352c19;
+  --m-policy:#6fc6bf; --m-recon:#9fb0d6; --m-table:#8fc9ac; --m-a:#e2887a; --m-b:#e3a570;
+  --m-c:#c9bba0; --m-c2:#7fd0bf; --m-d:#e0b267; --m-e:#e08fc4; --m-f:#8fd4a0; --m-g:#e2a0a0; --m-items:#b49bea; --m-customers:#8db5ef; --m-time:#7fd4e3; --m-quality:#c9c2ab;
+  --glow1:rgba(143,201,172,.08); --glow2:rgba(180,155,234,.07); --glow3:rgba(141,181,239,.06);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+body,.card,section,.modal,input,select,textarea,button,.refchip{transition:background-color .2s ease, color .2s ease, border-color .2s ease;}
+body{
+  background:
+    radial-gradient(1200px 600px at 12% -8%, var(--glow1), transparent 60%),
+    radial-gradient(1000px 520px at 108% 8%, var(--glow2), transparent 55%),
+    radial-gradient(900px 520px at 50% 120%, var(--glow3), transparent 60%),
+    var(--bg);
+  background-attachment:fixed,fixed,fixed,fixed;
+  color:var(--text);font-family:var(--body);direction:rtl;padding-inline:16px;}
+.wrap{max-width:1320px;margin:0 auto;padding-block:28px 60px;}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;}
+h1{font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.01em;}
+h2{font-size:17px;font-weight:700;}
+.eyebrow{font-size:12px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+.topline{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;
+  margin-bottom:26px;padding-bottom:18px;position:relative;}
+.topline::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:3px;border-radius:3px;
+  background:linear-gradient(90deg, var(--m-policy), var(--m-table), var(--m-a), var(--m-d), var(--m-items), var(--m-customers), var(--m-time));}
+.topline p{color:var(--muted);font-size:13.5px;margin:10px 0 0;max-width:62ch;}
+.brand-row{display:flex;align-items:center;gap:12px;}
+.brandmark{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:13px;flex-shrink:0;
+  background:linear-gradient(135deg, var(--m-table), var(--m-time));color:#fff;font-size:19px;font-weight:800;box-shadow:var(--shadow);}
+button{font-family:var(--body);font-size:13.5px;cursor:pointer;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);padding:9px 16px;transition:border-color .15s,background .15s;}
+button:hover{border-color:var(--accent);}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600;}
+button.primary:hover{opacity:.92;}
+button:disabled{opacity:.45;cursor:not-allowed;}
+input[type=text],input[type=date],input[type=password],select,textarea{
+  font-family:var(--body);font-size:13.5px;background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);padding:8px 12px;border-radius:8px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);}
+
+/* upload */
+#uploadZone{padding:38px 24px;text-align:center;border:1.5px dashed var(--border);border-radius:16px;
+  background:var(--surface);transition:border-color .15s,background .15s;margin-bottom:22px;}
+#uploadZone.drag{border-color:var(--accent);background:var(--accent-soft);}
+#uploadZone .icon{font-size:30px;margin-bottom:10px;}
+#uploadZone h2{margin-bottom:6px;}
+#uploadZone p{color:var(--muted);font-size:13.5px;margin:4px 0 16px;}
+#fileInput{display:none;}
+.status-bar{display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:12px 18px;margin-bottom:22px;}
+.status-bar.show{display:flex;}
+.status-bar .fname{font-weight:600;font-size:13.5px;}
+.status-bar .fmeta{color:var(--muted);font-size:12.5px;}
+#sheetPicker{display:none;margin-bottom:18px;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;}
+#sheetPicker.show{display:flex;}
+
+/* policy panel */
+.policy{padding:18px 20px;margin-bottom:22px;}
+.policy ol{margin:10px 0 0;padding-inline-start:22px;font-size:13.5px;line-height:1.75;}
+.policy ol li{margin-bottom:6px;}
+.policy .toggle{color:var(--accent);font-size:12.5px;cursor:pointer;user-select:none;margin-top:10px;display:inline-block;}
+
+#report{display:none;}
+#report.show{display:block;}
+
+.notice{background:var(--warn-bg);border:1px solid var(--warn);border-radius:12px;color:var(--text);
+  padding:14px 18px;margin-bottom:22px;font-size:13.5px;line-height:1.7;}
+.notice b{color:var(--warn);}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;}
+.scorecard{padding:16px;}
+.scorecard .lbl{color:var(--muted);font-size:12px;margin-bottom:6px;}
+.scorecard .val{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;font-family:var(--mono);}
+.scorecard .sub{color:var(--muted);font-size:11.5px;margin-top:4px;font-variant-numeric:tabular-nums;}
+.scorecard.accent{border-color:var(--accent);}
+.scorecard.good{border-color:var(--good);} .scorecard.good .val{color:var(--good);}
+.scorecard.bad{border-color:var(--bad);} .scorecard.bad .val{color:var(--bad);}
+.scorecard.warn{border-color:var(--warn);} .scorecard.warn .val{color:var(--warn);}
+
+section{padding:20px 22px;margin-bottom:20px;border-top:4px solid var(--mod, var(--accent));}
+section > h2{border-inline-start:3px solid var(--mod, var(--accent));padding-inline-start:10px;margin-bottom:14px;}
+.policy{border-top:4px solid var(--m-policy);}
+.policy > h2{border-inline-start:3px solid var(--m-policy);padding-inline-start:10px;}
+.mod-recon{--mod:var(--m-recon);} .mod-table{--mod:var(--m-table);}
+.mod-a{--mod:var(--m-a);} .mod-b{--mod:var(--m-b);}
+.mod-c{--mod:var(--m-c);} .mod-c2{--mod:var(--m-c2);} .mod-d{--mod:var(--m-d);} .mod-e{--mod:var(--m-e);}
+.mod-f{--mod:var(--m-f);} .mod-g{--mod:var(--m-g);}
+.mod-items{--mod:var(--m-items);} .mod-customers{--mod:var(--m-customers);}
+.mod-time{--mod:var(--m-time);} .mod-quality{--mod:var(--m-quality);}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+.toolbar input[type=text]{flex:1;min-width:180px;}
+.toolbar .spacer{flex:1;min-width:4px;}
+.totals-bar{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:10px;
+  font-variant-numeric:tabular-nums;}
+.totals-bar b{color:var(--text);}
+
+.table-scroll{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:600px;min-width:0;}
+table{width:100%;border-collapse:collapse;font-size:12.8px;}
+thead th{position:sticky;top:0;background:var(--surface-2);padding:10px 8px;text-align:right;
+  border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;font-weight:600;}
+thead th:hover{color:var(--accent);}
+thead th .arrow{opacity:.5;font-size:10px;margin-inline-end:3px;}
+tbody td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
+tbody tr:hover{background:var(--surface-2);}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+.badge.accepted{background:var(--good-bg);color:var(--good);}
+.badge.rejected{background:var(--bad-bg);color:var(--bad);}
+.badge.review{background:var(--warn-bg);color:var(--warn);}
+.row-accepted{border-inline-start:3px solid var(--good);}
+.row-rejected{border-inline-start:3px solid var(--bad);}
+.row-review{border-inline-start:3px solid var(--warn);}
+.detail-btn{padding:4px 10px;font-size:12px;border-radius:7px;}
+
+.mini-table{width:100%;font-size:12.8px;border-collapse:collapse;}
+.mini-table th{text-align:right;color:var(--muted);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--border);}
+.mini-table td{padding:6px 4px;border-bottom:1px solid var(--border);}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+@media (max-width:760px){.two-col{grid-template-columns:1fr;}}
+.refchip{display:inline-block;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
+  padding:4px 9px;margin:3px;font-family:var(--mono);font-size:11.5px;max-width:100%;vertical-align:top;}
+.refchip .ref-time{display:block;color:var(--muted);font-weight:400;font-size:10.5px;margin-top:3px;}
+.refchip .chip-detail{display:block;color:var(--muted);font-family:var(--body);font-size:10.5px;margin-top:3px;
+  white-space:normal;line-height:1.4;}
+.ref-time-inline,.sub-line{color:var(--muted);font-size:10.5px;font-weight:400;display:block;margin-top:1px;}
+.review-select{font-size:12px;padding:5px 8px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);}
+.review-select.done{border-color:var(--good);color:var(--good);font-weight:600;background:var(--good-bg);}
+.muted{color:var(--muted);}
+.empty-note{color:var(--muted);font-size:13px;padding:10px 2px;}
+#xlsxStatus{font-size:12px;}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,18,14,.55);z-index:50;
+  align-items:center;justify-content:center;padding:18px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:640px;
+  width:100%;max-height:85vh;overflow:auto;padding:22px;box-shadow:var(--shadow);}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px;}
+.modal .kv{display:grid;grid-template-columns:140px 1fr;gap:7px 12px;font-size:13px;margin-bottom:14px;}
+.modal .kv b{color:var(--muted);font-weight:600;}
+.modal ul{margin:4px 0;padding-inline-start:20px;font-size:13px;line-height:1.7;}
+.modal p{font-size:13px;margin:10px 0 2px;}
+#csvArea{width:100%;height:160px;font-family:var(--mono);font-size:11.5px;margin-top:10px;}
+
+footer{color:var(--muted);font-size:12px;text-align:center;padding-block:26px 10px;}
+[hidden]{display:none!important;}
+</style>
+<style>
+/* ---- RAVIN wrapper topbar ---- */
+.ravin-topbar{
+  position:sticky;top:0;z-index:500;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:10px 18px;background:#56061F;color:#fff;font-family:'Cairo',system-ui,sans-serif;
+  box-shadow:0 2px 10px rgba(0,0,0,.18);
+}
+.ravin-topbar .rv-brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.3px;font-size:14px;}
+.ravin-topbar .rv-brand .mk{color:#E9C77B;font-weight:900;}
+.ravin-topbar a.rv-back{
+  color:#fff;text-decoration:none;font-size:12.5px;font-weight:700;background:rgba(255,255,255,.12);
+  padding:7px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;
+}
+.ravin-topbar a.rv-back:hover{background:rgba(255,255,255,.22);}
+</style>
+</head>
+<body>
+<script>
+/* Blocking staff-only guard: must be signed in and not a branch (view-only) account. */
+(function(){
+  try{
+    var raw = localStorage.getItem('ravin_qc_session_v1');
+    var s = raw ? JSON.parse(raw) : null;
+    if(!s){ location.replace('index.html'); return; }
+    if(s.role === 'branch'){ location.replace('app.html'); return; }
+    /* Skip this tool's own internal login gate — RAVIN's own auth already protects this page. */
+    try{ localStorage.setItem('posAuditAuthed','1'); }catch(e){}
+  }catch(e){ location.replace('index.html'); }
+})();
+</script>
+<div class="ravin-topbar">
+  <div class="rv-brand"><span class="mk">RAVIN</span> · مدقق المرتجعات</div>
+  <a class="rv-back" href="app.html">→ رجوع لنظام RAVIN QC</a>
+</div>
+
+<div class="wrap">
+  <div class="topline">
+    <div>
+      <div class="brand-row">
+        <span class="brandmark">↺</span>
+        <div>
+          <div class="eyebrow">تدقيق مرتجعات نقاط البيع</div>
+          <h1>مدقق المرتجعات</h1>
+        </div>
+      </div>
+      <p>ارفع ملف "Point of Sale Orders" من هنا في أي وقت، وسيُبنى التقرير تلقائيًا بنفس سياسة المرتجعات والتبديل المتفقة — اكتمال إرجاع العروض، أخطاء التبديل، المرتجع النهائي مقابل نهاية دورة التبديل، وإعادة الشراء المشبوهة. المعالجة تتم بالكامل داخل متصفحك؛ الملف نفسه لا يُرفع لأي خادم، لكن آخر تقرير يُحفظ على هذا الرابط فيظهر تلقائيًا في المرة الجاية من غير ما ترفع الملف تاني.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+      <button id="themeToggle" title="تبديل الوضع الداكن/الفاتح">🌓 الوضع: تلقائي</button>
+      <button id="newFileBtn" hidden>رفع ملف آخر</button>
+    </div>
+  </div>
+
+  <div id="uploadZone" class="card">
+    <div class="icon">⇪</div>
+    <h2>ارفع شيت المرتجعات</h2>
+    <p>اسحب وأفلت ملف Excel هنا، أو اختره من جهازك (.xlsx)</p>
+    <button class="primary" id="pickBtn">اختيار ملف</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <p id="uploadError" class="muted" style="color:var(--bad);display:none;"></p>
+  </div>
+
+  <div id="sheetPicker" class="card">
+    <span class="muted" style="font-size:13px;">الملف يحتوي على أكثر من ورقة عمل — اختر الورقة المقصودة:</span>
+    <select id="sheetSelect"></select>
+    <button class="primary" id="sheetGoBtn">تحليل هذه الورقة</button>
+  </div>
+
+  <div class="status-bar card" id="statusBar">
+    <div>
+      <div class="fname" id="statusFname"></div>
+      <div class="fmeta" id="statusFmeta"></div>
+    </div>
+    <div class="fmeta" id="saveStatus"></div>
+  </div>
+
+  <div class="policy card">
+    <h2>سياسة المرتجعات المطبّقة</h2>
+    <ol>
+      <li><b>اكتمال إرجاع العروض:</b> أي قطع مرتجعة من عرض "اشتر X واحصل على Y" يجب أن تكون بعدد مساوٍ أو مضاعف كامل لعدد القطع المجانية (Y−X)، وإلا تُعتبر مخالفة ويُرفض السطر.</li>
+      <li><b>تطابق التبديل:</b> إذا رجّع العميل فاتورة واشترى أخرى خلال 120 دقيقة (بنفس رقم الهاتف وبها أصناف أو عروض مشتركة)، تُعامل كعملية تبديل؛ فإذا كانت على عرض ولم يتطابق عدد القطع المرتجعة مع المعاد تسجيلها، يُرفض السطر.</li>
+      <li><b>المرتجع النهائي:</b> فاتورة مرتجع لعميل لم يشترِ مرة أخرى بعدها في بيانات الملف تُصنَّف "مرتجع نهائي". إن كان الصنف المرتجع نفسه قد أتى أصلًا من عملية تبديل سابقة، تُفصل هذه الحالة في قسم "نهاية دورة تبديل" بدلًا من اعتبارها عميلًا فاقدًا جديدًا.</li>
+      <li><b>نمط إعادة الشراء المشبوه:</b> مرتجع تبعه شراء لاحق في نفس الفرع (خارج نافذة التبديل السريع) بنفس الأصناف تقريبًا وبفارق 1–3 قطع فقط — يُصنَّف "يحتاج إلى مراجعة" وليس مخالفة مؤكدة.</li>
+      <li><b>توثيق الخصومات في Customer Note:</b> أي عرض خصم بالنسبة (غير "اشتر X واحصل على Y")، أو خصم إضافي 10% فوق عرض قطع، أو خصم بنسبة 20% أو 30% على الفاتورة، يجب أن يكون موثقًا بكود الخصم واسم الحملة في خانة Customer Note؛ فإن كانت الخانة فارغة أو غير موجودة، تُعتبر الفاتورة مخالفة. يُطبَّق هذا الشرط وشرط اكتمال إرجاع العروض على فواتير البيع أيضًا، وليس فقط على المرتجعات.</li>
+    </ol>
+    <span class="toggle" id="policyMore">+ متى يُصنَّف الصنف "مقبول" تلقائيًا، وما حدود التحليل؟</span>
+    <div id="policyMoreBody" hidden style="margin-top:10px;font-size:13px;color:var(--muted);line-height:1.7;">
+      أي سطر مرتجع لا يخالف الشرطين (1) و(2) أعلاه يُصنَّف "مقبول" تلقائيًا، لعدم وجود سبب رفض منصوص عليه في السياسة المتفقة — وليس لأنه تم التحقق من سبب إرجاعه. الملفات المعتادة لا تحتوي على عمود "سبب المرتجع" ولا مدة سماح زمنية عامة، فلم تُفترض أي شروط غير موجودة في البيانات أو السياسة. "تاريخ البيع" الظاهر لكل صنف مُشتق من آخر فاتورة بيع سابقة لنفس العميل <b>داخل نفس الملف المرفوع فقط</b>.
+    </div>
+  </div>
+
+  <div id="report">
+    <div id="dataNotice" class="notice" hidden></div>
+    <div class="cards" id="summaryCards"></div>
+
+    <section class="mod-recon">
+      <h2>التسوية العددية (مطابقة السجلات)</h2>
+      <table class="mini-table" id="reconTable"></table>
+    </section>
+
+    <section class="mod-table">
+      <h2>جدول المرتجعات التفصيلي</h2>
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="بحث برقم الفاتورة / الهاتف / كود الصنف / اسم المنتج">
+        <select id="statusFilter">
+          <option value="">كل الحالات</option>
+          <option value="مقبول">مقبول</option>
+          <option value="مرفوض">مرفوض</option>
+          <option value="يحتاج إلى مراجعة">يحتاج إلى مراجعة</option>
+        </select>
+        <select id="storeFilter">
+          <option value="">كل الفروع</option>
+        </select>
+        <input type="date" id="dateFrom" title="من تاريخ">
+        <input type="date" id="dateTo" title="إلى تاريخ">
+        <span class="spacer"></span>
+        <button id="resetFilters">إعادة ضبط</button>
+        <button id="copyCsvBtn">نسخ CSV</button>
+        <button class="primary" id="downloadXlsxBtn">⇩ تنزيل Excel مفصّل</button>
+      </div>
+      <div id="xlsxStatus" class="muted" style="margin-bottom:6px;"></div>
+      <div class="totals-bar" id="totalsBar"></div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th data-key="serial">#</th>
+          <th data-key="ref">الفاتورة</th>
+          <th data-key="store">الفرع</th>
+          <th data-key="return_date">تاريخ المرتجع</th>
+          <th data-key="sale_date">تاريخ البيع</th>
+          <th data-key="phone">الهاتف</th>
+          <th data-key="barcode">الكود</th>
+          <th data-key="product_name">المنتج</th>
+          <th data-key="qty_returned">الكمية</th>
+          <th data-key="line_total">القيمة</th>
+          <th data-key="offer">العرض / الخصم</th>
+          <th data-key="status">الحالة</th>
+          <th data-key="reviewed">المراجعة</th>
+          <th>تفاصيل</th>
+        </tr></thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+      </div>
+    </section>
+
+    <div class="two-col">
+      <section class="mod-a"><h2>مخالفات اكتمال إرجاع العروض</h2><div id="checkAList"></div></section>
+      <section class="mod-b"><h2>أخطاء التبديل</h2><div id="checkBList"></div></section>
+    </div>
+    <div class="two-col">
+      <section class="mod-c"><h2>مرتجع نهائي بدون إعادة شراء</h2><div id="checkCList"></div></section>
+      <section class="mod-c2"><h2>نهاية دورة تبديل (وُسمت سابقًا كمرتجع نهائي)</h2><div id="checkC2List"></div></section>
+    </div>
+    <section class="mod-d"><h2>نمط إعادة شراء مشبوه بعد مرتجع</h2><div id="checkDList"></div></section>
+    <section class="mod-e"><h2>فواتير مرتجع بخصم يستوجب توثيقًا في Customer Note</h2><div id="checkEList"></div></section>
+
+    <h2 style="margin:28px 0 -6px;">فواتير البيع المخالفة للسياسة</h2>
+    <div class="two-col">
+      <section class="mod-f"><h2>مخالفات اكتمال عرض في فواتير البيع</h2><div id="checkFList"></div></section>
+      <section class="mod-g"><h2>فواتير بيع بخصم يستوجب توثيقًا في Customer Note</h2><div id="checkGList"></div></section>
+    </div>
+
+    <div class="two-col">
+      <section class="mod-items"><h2>الأصناف الأكثر تكرارًا في المرتجعات</h2><table class="mini-table" id="topItemsTable"></table></section>
+      <section class="mod-customers"><h2>العملاء الأكثر طلبًا للمرتجعات</h2><table class="mini-table" id="topCustomersTable"></table></section>
+    </div>
+    <section class="mod-time"><h2>توزيع المرتجعات حسب اليوم</h2><table class="mini-table" id="timeDistTable"></table></section>
+
+    <section class="mod-quality">
+      <h2>ملاحظات جودة البيانات والحالات الاستثنائية</h2>
+      <ul id="qualityNotes" style="font-size:13.5px;line-height:1.8;margin:0;padding-inline-start:20px;"></ul>
+    </section>
+  </div>
+
+  <footer>التحليل يعمل بالكامل داخل متصفحك — لا يتم رفع أي ملف لأي خادم. أعد رفع نفس الصفحة في أي وقت لتحليل شيت جديد بنفس المنهجية.</footer>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle" style="margin:0;"></h3>
+      <button id="closeModal">إغلاق ✕</button>
+    </div>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="csvOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 style="margin:0;">نسخ بيانات CSV</h3>
+      <button id="closeCsv">إغلاق ✕</button>
+    </div>
+    <p class="muted" style="font-size:13px;">تم نسخ البيانات إلى الحافظة تلقائيًا إن أمكن. إن لم يعمل النسخ التلقائي، حدد النص أدناه وانسخه يدويًا (Ctrl/Cmd+C).</p>
+    <textarea id="csvArea" readonly></textarea>
+  </div>
+</div>
+
+<div class="modal-overlay open" id="loginGate" style="z-index:300;">
+  <div class="modal" style="max-width:380px;">
+    <div class="brand-row" style="justify-content:center;margin:0 0 16px;">
+      <span class="brandmark">↺</span>
+      <div>
+        <div class="eyebrow">تدقيق مرتجعات نقاط البيع</div>
+        <h1 style="font-size:19px;">مدقق المرتجعات</h1>
+      </div>
+    </div>
+    <p class="muted" style="font-size:13px;margin:0 0 16px;text-align:center;">الدخول مقصور على فريق الجودة (QC)</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input type="text" id="loginUser" placeholder="اسم المستخدم" autocomplete="username" style="width:100%;">
+      <input type="password" id="loginPass" placeholder="كلمة المرور" autocomplete="current-password" style="width:100%;">
+      <button class="primary" id="loginBtn" style="width:100%;">دخول</button>
+      <p id="loginError" style="color:var(--bad);font-size:12.5px;display:none;margin:2px 0 0;text-align:center;"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function money(v){ v = v||0; return v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtDate(d){
+  if(!d) return null;
+  if(!(d instanceof Date) || isNaN(d)) return null;
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function dayKey(d){
+  if(!(d instanceof Date) || isNaN(d)) return null;
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function timeOnly(dtStr){
+  if(!dtStr) return '';
+  const parts = String(dtStr).split(' ');
+  return parts[1] || '';
+}
+function buildRefTimeMap(records){
+  const m = new Map();
+  records.forEach(r=>{ if(!m.has(r.ref)) m.set(r.ref, r.return_date); });
+  return m;
+}
+function normPhone(v){
+  if(v===null||v===undefined||v==='') return null;
+  if(typeof v==='number') return String(Math.trunc(v));
+  const s=String(v).trim();
+  if(!s) return null;
+  if(/^\d+\.0$/.test(s)) return s.slice(0,-2);
+  return s;
+}
+function findHeader(headers, mustAll, mustAny){
+  const low = headers.map(h=>({h, l:String(h).toLowerCase()}));
+  for(const {h,l} of low){
+    if(mustAll.every(m=>l.includes(m)) && (!mustAny || mustAny.some(m=>l.includes(m)))) return h;
+  }
+  return null;
+}
+
+/* ---------- state ---------- */
+let workbook = null;
+let currentFileName = null;
+let currentSheetName = null;
+let DB = null;
+
+/* ---------- db persistence (report stays saved on this link) ---------- */
+async function initCapabilities(){
+  try{
+    if(typeof claude === 'undefined' || !claude.use){ DB = null; return; }
+    DB = await claude.use('db');
+  }catch(e){ DB = null; }
+}
+
+function setSaveStatus(text){
+  const el = $('saveStatus');
+  if(el) el.textContent = text;
+}
+
+function serializeForDb(state, meta){
+  const CHUNK_SIZE = 60;
+  const records = state.records;
+  const chunks = [];
+  for(let i=0;i<records.length;i+=CHUNK_SIZE) chunks.push(records.slice(i, i+CHUNK_SIZE));
+  const summaryDoc = {
+    generatedAt: new Date().toISOString(),
+    fileName: meta.fileName || null,
+    sheetName: meta.sheetName || null,
+    hasPhone: !!state.hasPhone, hasDate: !!state.hasDate, hasDiscountCol: !!state.hasDiscountCol, hasCustomerNoteCol: !!state.hasCustomerNoteCol,
+    summary: state.summary, reconciliation: state.reconciliation,
+    topItems: state.topItems, topCustomers: state.topCustomers, timeDist: state.timeDist,
+    reviewRefs: state.reviewRefs,
+    violationsA: [...state.violationsA.entries()].map(([ref,v])=>({ref, items:v})),
+    violationsB: [...state.violationsB.entries()].map(([ref,v])=>({ref, items:v})),
+    violationsE: [...state.violationsE.entries()].map(([ref,v])=>({ref, items:v})),
+    violationsF: [...state.violationsF.entries()].map(([ref,v])=>({ref, items:v})),
+    violationsG: [...state.violationsG.entries()].map(([ref,v])=>({ref, items:v})),
+    refDates: state.refDates || [],
+    noRepurchaseRefs: [...state.noRepurchaseRefs],
+    tailOfExchangeRefs: [...state.tailOfExchangeRefs.entries()].map(([ref,origin])=>({ref, origin})),
+    reorderRefs: [...state.reorderMap.entries()].map(([ref,v])=>({ref, items:v})),
+    totalChunks: chunks.length, totalRecords: records.length,
+  };
+  return {summaryDoc, chunks};
+}
+
+async function saveReportToDb(state, meta){
+  if(!DB){ setSaveStatus(''); return; }
+  setSaveStatus('جارِ الحفظ على الرابط...');
+  try{
+    const reportDoc = DB.doc('reports/latest');
+    const chunksCol = reportDoc.collection('chunks');
+    const existing = await chunksCol.limit(1000).get();
+    for(const d of existing.docs){ await chunksCol.doc(d.id).delete(); }
+    const {summaryDoc, chunks} = serializeForDb(state, meta);
+    for(let i=0;i<chunks.length;i++){
+      await chunksCol.doc('c'+i).set({idx:i, records: chunks[i]});
+    }
+    await reportDoc.set(summaryDoc);
+    setSaveStatus('محفوظ على هذا الرابط ✓');
+  }catch(e){
+    setSaveStatus('تعذّر الحفظ على الرابط - التقرير شغال في هذه الجلسة فقط');
+  }
+}
+
+async function loadReportFromDb(){
+  if(!DB) return null;
+  try{
+    const snap = await DB.doc('reports/latest').get();
+    if(!snap.exists) return null;
+    const doc = snap.data();
+    const chunksCol = DB.doc('reports/latest').collection('chunks');
+    const q = await chunksCol.orderBy('idx','asc').limit(1000).get();
+    let records = [];
+    q.docs.forEach(d=>{
+      const data = d.data();
+      if(data && Array.isArray(data.records)) records = records.concat(data.records);
+    });
+    return {
+      summary: doc.summary, records,
+      topItems: doc.topItems||[], topCustomers: doc.topCustomers||[],
+      timeDist: doc.timeDist||[], reviewRefs: doc.reviewRefs||[],
+      reconciliation: doc.reconciliation,
+      violationsA: new Map((doc.violationsA||[]).map(x=>[x.ref, x.items])),
+      violationsB: new Map((doc.violationsB||[]).map(x=>[x.ref, x.items])),
+      violationsE: new Map((doc.violationsE||[]).map(x=>[x.ref, x.items])),
+      violationsF: new Map((doc.violationsF||[]).map(x=>[x.ref, x.items])),
+      violationsG: new Map((doc.violationsG||[]).map(x=>[x.ref, x.items])),
+      refDates: doc.refDates || [],
+      noRepurchaseRefs: new Set(doc.noRepurchaseRefs||[]),
+      tailOfExchangeRefs: new Map((doc.tailOfExchangeRefs||[]).map(x=>[x.ref, x.origin])),
+      reorderMap: new Map((doc.reorderRefs||[]).map(x=>[x.ref, x.items])),
+      hasPhone: !!doc.hasPhone, hasDate: !!doc.hasDate, hasDiscountCol: !!doc.hasDiscountCol, hasCustomerNoteCol: !!doc.hasCustomerNoteCol,
+      _meta: {fileName: doc.fileName, sheetName: doc.sheetName, generatedAt: doc.generatedAt},
+    };
+  }catch(e){ return null; }
+}
+
+/* ---------- theme toggle (light / dark / system) ---------- */
+const THEME_KEY = 'posAuditTheme';
+function getStoredTheme(){
+  try{ return localStorage.getItem(THEME_KEY); }catch(e){ return null; }
+}
+function setStoredTheme(v){
+  try{ if(v) localStorage.setItem(THEME_KEY, v); else localStorage.removeItem(THEME_KEY); }catch(e){}
+}
+function applyTheme(v){
+  if(v==='light') document.documentElement.setAttribute('data-theme','light');
+  else if(v==='dark') document.documentElement.setAttribute('data-theme','dark');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn = $('themeToggle');
+  if(btn){
+    const label = v==='light' ? 'فاتح' : v==='dark' ? 'داكن' : 'تلقائي';
+    const icon = v==='light' ? '☀️' : v==='dark' ? '🌙' : '🌓';
+    btn.textContent = `${icon} الوضع: ${label}`;
+  }
+}
+let currentTheme = getStoredTheme();
+applyTheme(currentTheme);
+$('themeToggle').addEventListener('click', ()=>{
+  currentTheme = currentTheme===null ? 'light' : currentTheme==='light' ? 'dark' : null;
+  setStoredTheme(currentTheme);
+  applyTheme(currentTheme);
+});
+
+/* ---------- login gate (client-side only - a soft access gate, not real security) ---------- */
+const LOGIN_USER = 'qc', LOGIN_PASS = '1642', AUTH_KEY = 'posAuditAuthed';
+function isAuthed(){
+  try{ return localStorage.getItem(AUTH_KEY)==='1'; }catch(e){ return false; }
+}
+function setAuthed(){
+  try{ localStorage.setItem(AUTH_KEY,'1'); }catch(e){}
+}
+function showGate(show){
+  const g = $('loginGate');
+  if(g) g.classList.toggle('open', show);
+}
+function doLogin(){
+  const u = $('loginUser').value.trim();
+  const p = $('loginPass').value;
+  const err = $('loginError');
+  if(u===LOGIN_USER && p===LOGIN_PASS){
+    setAuthed();
+    showGate(false);
+    err.style.display='none';
+  }else{
+    err.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+    err.style.display='block';
+  }
+}
+if(isAuthed()) showGate(false);
+$('loginBtn').addEventListener('click', doLogin);
+['loginUser','loginPass'].forEach(id=>{
+  $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+});
+
+/* ---------- upload wiring ---------- */
+const uploadZone = $('uploadZone'), fileInput = $('fileInput'), pickBtn = $('pickBtn');
+pickBtn.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+['dragenter','dragover'].forEach(ev=> uploadZone.addEventListener(ev, e=>{ e.preventDefault(); uploadZone.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=> uploadZone.addEventListener(ev, e=>{ e.preventDefault(); uploadZone.classList.remove('drag'); }));
+uploadZone.addEventListener('drop', e=>{
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+$('newFileBtn').addEventListener('click', ()=>{
+  workbook = null;
+  $('report').classList.remove('show');
+  $('statusBar').classList.remove('show');
+  $('sheetPicker').classList.remove('show');
+  $('newFileBtn').hidden = true;
+  uploadZone.hidden = false;
+  fileInput.value = '';
+  $('uploadError').style.display='none';
+});
+
+function showError(msg){
+  const el = $('uploadError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function handleFile(file){
+  $('uploadError').style.display='none';
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      workbook = XLSX.read(data, {type:'array', cellDates:true});
+    }catch(err){
+      showError('تعذّرت قراءة الملف. تأكد أنه ملف Excel (.xlsx) صالح.');
+      return;
+    }
+    const sheetNames = workbook.SheetNames.filter(n=>{
+      const ws = workbook.Sheets[n];
+      return ws && ws['!ref'];
+    });
+    if(sheetNames.length===0){ showError('لم يتم العثور على بيانات في أي ورقة عمل بالملف.'); return; }
+    currentFileName = file.name;
+    $('statusFname').textContent = file.name;
+    setSaveStatus('');
+    $('statusBar').classList.add('show');
+    uploadZone.hidden = true;
+    $('newFileBtn').hidden = false;
+    if(sheetNames.length===1){
+      runAnalysis(sheetNames[0]);
+    }else{
+      const sel = $('sheetSelect');
+      sel.innerHTML = sheetNames.map(n=>`<option value="${n}">${n}</option>`).join('');
+      $('sheetPicker').classList.add('show');
+      $('sheetGoBtn').onclick = ()=> runAnalysis(sel.value);
+    }
+  };
+  reader.onerror = ()=> showError('تعذّرت قراءة الملف من جهازك.');
+  reader.readAsArrayBuffer(file);
+}
+
+$('policyMore').addEventListener('click', ()=>{
+  const b = $('policyMoreBody');
+  b.hidden = !b.hidden;
+});
+
+/* ============================================================
+   ANALYSIS PIPELINE
+   ============================================================ */
+function runAnalysis(sheetName){
+  currentSheetName = sheetName;
+  const ws = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json(ws, {defval:null, raw:true});
+  if(rawRows.length===0){ showError('ورقة العمل المختارة فارغة.'); return; }
+  const headers = Object.keys(rawRows[0]);
+
+  const col = {
+    ref: findHeader(headers, ['order'], ['ref']) || findHeader(headers,['ref']) || findHeader(headers,['receipt']),
+    barcode: findHeader(headers, ['barcode']),
+    qty: findHeader(headers, ['quantity']),
+    name: findHeader(headers, ['product'], ['name']) || findHeader(headers, ['name']),
+    price: findHeader(headers, ['unit', 'price']),
+    subtotal: findHeader(headers, ['subtotal']) || findHeader(headers, ['tax','incl']),
+    offer: findHeader(headers, ['offer']),
+    phone: findHeader(headers, ['phone']),
+    date: headers.find(h=>String(h).trim().toLowerCase()==='date') || findHeader(headers,['date']),
+    discountPct: findHeader(headers, ['discount'], ['%','percent']),
+  };
+  col.discountAmt = headers.find(h=> String(h).toLowerCase().includes('discount') && h!==col.discountPct) || null;
+  col.customerNote = findHeader(headers, ['customer'], ['note']) || findHeader(headers, ['note']);
+  col.paymentMethod = findHeader(headers, ['payment'], ['method']);
+
+  if(!col.ref || !col.barcode || !col.qty){
+    showError('تعذّر التعرف على أعمدة أساسية (رقم الفاتورة / كود الصنف / الكمية) في هذه الورقة. تأكد أن الملف بنفس تنسيق تصدير Point of Sale Orders المعتاد.');
+    $('statusBar').classList.remove('show');
+    uploadZone.hidden = false;
+    $('newFileBtn').hidden = true;
+    return;
+  }
+
+  const hasPhone = !!col.phone && rawRows.some(r=> r[col.phone]!==null && r[col.phone]!==undefined && r[col.phone]!=='');
+  const hasDate = !!col.date && rawRows.some(r=> r[col.date] instanceof Date);
+  const hasDiscountCol = !!col.discountPct || !!col.discountAmt;
+  const hasCustomerNoteCol = !!col.customerNote && rawRows.some(r=> r[col.customerNote]!==null && r[col.customerNote]!==undefined && String(r[col.customerNote]).trim()!=='');
+
+  $('statusFmeta').textContent =
+    `ورقة "${sheetName}" • ${rawRows.length} صف خام • ${hasPhone?'يحتوي على أرقام هواتف':'لا يحتوي على أرقام هواتف'} • ${hasDate?'يحتوي على تواريخ/أوقات':'لا يحتوي على تواريخ'}`;
+
+  /* ---- normalize rows ---- */
+  const blankRows = [];
+  const items = [];
+  rawRows.forEach((r, idx)=>{
+    const ref = r[col.ref];
+    const barcode = r[col.barcode];
+    const qty = r[col.qty];
+    if((ref===null||ref===undefined||ref==='') && (barcode===null||barcode===undefined||barcode==='') && (qty===null||qty===undefined)){
+      blankRows.push(idx); return;
+    }
+    items.push({
+      idx, ref: ref==null?null:String(ref).trim(),
+      barcode: barcode==null?null:String(barcode).trim(),
+      qty: (qty===null||qty===undefined||qty==='') ? null : Number(qty),
+      name: col.name ? r[col.name] : null,
+      price: (col.price && r[col.price]!=null && r[col.price]!=='') ? Number(r[col.price]) : null,
+      subtotal: (col.subtotal && r[col.subtotal]!=null && r[col.subtotal]!=='') ? Number(r[col.subtotal]) : null,
+      offer: col.offer ? (r[col.offer]==null||r[col.offer]==='' ? null : r[col.offer]) : null,
+      phone: col.phone ? normPhone(r[col.phone]) : null,
+      date: col.date ? (r[col.date] instanceof Date ? r[col.date] : null) : null,
+      discountPct: (col.discountPct && r[col.discountPct]!=null && r[col.discountPct]!=='') ? Number(r[col.discountPct]) : null,
+      discountAmt: (col.discountAmt && r[col.discountAmt]!=null && r[col.discountAmt]!=='') ? Number(r[col.discountAmt]) : null,
+      customerNote: (col.customerNote && r[col.customerNote]!=null && String(r[col.customerNote]).trim()!=='') ? String(r[col.customerNote]).trim() : null,
+      paymentMethod: (col.paymentMethod && r[col.paymentMethod]!=null && String(r[col.paymentMethod]).trim()!=='') ? String(r[col.paymentMethod]).trim() : null,
+    });
+  });
+
+  function parseRef(ref){
+    const s = String(ref||'');
+    const refundTextFlag = /REFUND/i.test(s);
+    const base = s.replace(/\s*REFUND\s*$/i,'').trim();
+    let store, numRaw;
+    const slash = base.lastIndexOf('/');
+    if(slash>=0){
+      store = base.slice(0,slash); numRaw = base.slice(slash+1);
+    }else{
+      /* newer export format uses dash-separated receipt numbers, e.g. "265-199-000006", with no slash and no REFUND suffix */
+      const dash = base.indexOf('-');
+      if(dash>=0){ store = base.slice(0,dash); numRaw = base.slice(dash+1); }
+      else { store = base; numRaw = ''; }
+    }
+    const digits = numRaw.replace(/\D/g,'');
+    const num = digits ? parseInt(digits,10) : null;
+    return {store: store.trim(), num, refundTextFlag};
+  }
+
+  /* ---- group into invoices, forward/back-fill phone & date within ref ---- */
+  const byRef = new Map();
+  items.forEach(it=>{
+    if(!byRef.has(it.ref)) byRef.set(it.ref, []);
+    byRef.get(it.ref).push(it);
+  });
+
+  const invoices = [];
+  byRef.forEach((lines, ref)=>{
+    const {store: refStore, num, refundTextFlag} = parseRef(ref);
+    let phone = null, date = null, customerNote = null, paymentMethod = null;
+    for(const l of lines){ if(l.phone){ phone = l.phone; break; } }
+    for(const l of lines){ if(l.date){ date = l.date; break; } }
+    for(const l of lines){ if(l.customerNote){ customerNote = l.customerNote; break; } }
+    for(const l of lines){ if(l.paymentMethod){ paymentMethod = l.paymentMethod; break; } }
+    /* newer export format shows the branch as the suffix after " - " in Payment Method (e.g. "VISA BM - MOK" -> MOK);
+       prefer it as the displayed store/branch when available, otherwise fall back to the ref-derived store text (older format) */
+    const branchCode = (paymentMethod && paymentMethod.includes(' - ')) ? paymentMethod.split(' - ').pop().trim() : null;
+    const store = branchCode || refStore;
+    /* newer export format has no REFUND marker in the ref - return lines are signaled by a negative quantity instead;
+       combine both signals so older files (REFUND in ref) and newer files (negative qty) are both detected correctly */
+    let qtyRefundSignal = false, sawQty = false;
+    for(const l of lines){ if(l.qty!=null){ qtyRefundSignal = l.qty<0; sawQty = true; break; } }
+    const is_refund = refundTextFlag || (sawQty && qtyRefundSignal);
+    const itemsMap = new Map();
+    lines.forEach(l=>{
+      if(l.barcode==null) return;
+      const q = Math.abs(l.qty||0);
+      itemsMap.set(l.barcode, (itemsMap.get(l.barcode)||0) + q);
+    });
+    const offerPieces = new Map();
+    lines.forEach(l=>{
+      if(!l.offer) return;
+      const q = Math.abs(l.qty||0);
+      offerPieces.set(l.offer, (offerPieces.get(l.offer)||0) + q);
+    });
+    let totalPieces=0; itemsMap.forEach(v=>totalPieces+=v);
+    let netSubtotal=0, netQty=0;
+    lines.forEach(l=>{ netSubtotal += (l.subtotal||0); netQty += (l.qty||0); });
+
+    let discountPct = null, discountSource = null;
+    const pctLine = lines.find(l=> l.discountPct!=null);
+    if(pctLine){
+      discountPct = pctLine.discountPct; discountSource = 'عمود نسبة الخصم في الملف';
+    }else{
+      let discAmtSum = 0, hasAmt = false;
+      lines.forEach(l=>{ if(l.discountAmt!=null){ discAmtSum += Math.abs(l.discountAmt); hasAmt = true; } });
+      if(hasAmt && (netSubtotal + discAmtSum) > 0){
+        discountPct = Math.round(1000 * discAmtSum / (netSubtotal + discAmtSum)) / 10;
+        discountSource = 'محسوبة من عمود قيمة الخصم مقابل صافي قيمة الفاتورة';
+      }
+    }
+
+    invoices.push({ref, store, num, is_refund, phone, date, customerNote, items: itemsMap, offerPieces, totalPieces, netSubtotal, netQty, lines, discountPct, discountSource});
+  });
+
+  /* ref -> formatted date/time map covering ALL invoices (sale + return), used to show time on any ref chip */
+  const refDatesMap = new Map();
+  invoices.forEach(inv=> refDatesMap.set(inv.ref, fmtDate(inv.date)));
+
+  /* shared trigger logic: when must a Customer Note (discount code + campaign name) be present on an invoice */
+  function noteRequiredTriggers(inv){
+    const triggers = [];
+    const offerNames = [...inv.offerPieces.keys()];
+    const hasBundleOffer = offerNames.some(o=> /BUY\s*\d+\s*GET\s*\d+/i.test(o));
+    offerNames.filter(o=> !/BUY\s*\d+\s*GET\s*\d+/i.test(o)).forEach(o=>{
+      triggers.push({reason:'offer', offer:o, label:`عرض نسبة "${o}" بدون توثيق`});
+    });
+    if(inv.discountPct!=null){
+      const pct = inv.discountPct;
+      if(hasBundleOffer && Math.abs(pct-10)<0.5) triggers.push({reason:'extra10', offer:null, pct, label:'خصم إضافي 10% فوق عرض القطع بدون توثيق'});
+      if(Math.abs(pct-20)<0.5) triggers.push({reason:'pct20', offer:null, pct, label:'خصم 20% بدون توثيق'});
+      if(Math.abs(pct-30)<0.5) triggers.push({reason:'pct30', offer:null, pct, label:'خصم 30% بدون توثيق'});
+    }
+    return triggers;
+  }
+
+  /* ---- CHECK A: offer bundle completeness ---- */
+  const violationsA = new Map();
+  invoices.filter(i=>i.is_refund).forEach(inv=>{
+    inv.offerPieces.forEach((returned, offer)=>{
+      const m = /BUY\s*(\d+)\s*GET\s*(\d+)/i.exec(offer);
+      if(!m) return;
+      const buyN = +m[1], getN = +m[2], expected = getN - buyN;
+      if(expected<=0 || returned % expected !== 0){
+        if(!violationsA.has(inv.ref)) violationsA.set(inv.ref, []);
+        violationsA.get(inv.ref).push({offer, expected, returned});
+      }
+    });
+  });
+
+  /* ---- CHECK B: exchange pairs + errors (needs phone+date) ---- */
+  const exchPairsSeen = new Set();
+  const exchangeResaleRefs = new Set();
+  const exchangeReturnRefs = new Set();
+  const violationsB = new Map();
+  const exchangePairMap = new Map();
+
+  if(hasPhone && hasDate){
+    const byPhone = new Map();
+    invoices.forEach(inv=>{
+      if(!inv.phone || !inv.date) return;
+      if(!byPhone.has(inv.phone)) byPhone.set(inv.phone, []);
+      byPhone.get(inv.phone).push(inv);
+    });
+    byPhone.forEach(list=>{
+      list.sort((a,b)=> a.date - b.date);
+      for(let i=0;i<list.length-1;i++){
+        const a=list[i], b=list[i+1];
+        if(a.is_refund === b.is_refund) continue;
+        const gapMin = (b.date - a.date)/60000;
+        if(gapMin<0 || gapMin>120) continue;
+        const refundInv = a.is_refund ? a : b;
+        const saleInv = a.is_refund ? b : a;
+        const sharedOffers = [...refundInv.offerPieces.keys()].filter(o=>saleInv.offerPieces.has(o));
+        const commonBarcodes = [...refundInv.items.keys()].filter(c=>saleInv.items.has(c));
+        if(sharedOffers.length===0 && commonBarcodes.length===0) continue;
+        const pairKey = refundInv.ref+'|'+saleInv.ref;
+        if(exchPairsSeen.has(pairKey)) continue;
+        exchPairsSeen.add(pairKey);
+        exchangeResaleRefs.add(saleInv.ref);
+        exchangeReturnRefs.add(refundInv.ref);
+        exchangePairMap.set(refundInv.ref, saleInv.ref);
+        exchangePairMap.set(saleInv.ref, refundInv.ref);
+        sharedOffers.forEach(off=>{
+          const retN = refundInv.offerPieces.get(off)||0;
+          const takeN = saleInv.offerPieces.get(off)||0;
+          if(retN !== takeN){
+            const entry = {pairRef:saleInv.ref, offer:off, returned:retN, retaken:takeN, gapMin:Math.round(gapMin*10)/10};
+            if(!violationsB.has(refundInv.ref)) violationsB.set(refundInv.ref, []);
+            violationsB.get(refundInv.ref).push(entry);
+            const entry2 = {pairRef:refundInv.ref, offer:off, returned:retN, retaken:takeN, gapMin:Math.round(gapMin*10)/10};
+            if(!violationsB.has(saleInv.ref)) violationsB.set(saleInv.ref, []);
+            violationsB.get(saleInv.ref).push(entry2);
+          }
+        });
+      }
+    });
+  }
+
+  /* ---- CHECK C: full return no repurchase vs tail-of-exchange (needs phone+date) ---- */
+  const noRepurchaseRefs = new Set();
+  const tailOfExchangeRefs = new Map();
+  const salesByPhone = new Map();
+  if(hasPhone){
+    invoices.forEach(inv=>{
+      if(!inv.is_refund && inv.phone){
+        if(!salesByPhone.has(inv.phone)) salesByPhone.set(inv.phone, []);
+        salesByPhone.get(inv.phone).push(inv);
+      }
+    });
+  }
+  function findOriginSale(retInv, barcode){
+    if(!retInv.phone) return null;
+    const list = salesByPhone.get(retInv.phone) || [];
+    let best = null;
+    for(const s of list){
+      if(!s.date || !retInv.date || s.date >= retInv.date) continue;
+      if(s.items.has(barcode)){ if(!best || s.date > best.date) best = s; }
+    }
+    return best;
+  }
+  if(hasPhone && hasDate){
+    invoices.filter(i=>i.is_refund && i.phone).forEach(inv=>{
+      const list = salesByPhone.get(inv.phone) || [];
+      const hasLater = list.some(s=> s.date && inv.date && s.date > inv.date);
+      if(hasLater) return;
+      const retBarcodes = [...inv.items.keys()];
+      let best = null;
+      for(const bc of retBarcodes){
+        const o = findOriginSale(inv, bc);
+        if(o && (!best || o.date > best.date)) best = o;
+      }
+      if(best && exchangeResaleRefs.has(best.ref)){
+        tailOfExchangeRefs.set(inv.ref, best.ref);
+      }else{
+        noRepurchaseRefs.add(inv.ref);
+      }
+    });
+  }
+
+  /* ---- CHECK D: repeat purchase after return (same store), excl. exchange pairs ---- */
+  const reorderMap = new Map();
+  const returnsWithNum = invoices.filter(i=>i.is_refund && i.num!==null);
+  const salesWithNum = invoices.filter(i=>!i.is_refund && i.num!==null);
+  const salesByStore = new Map();
+  salesWithNum.forEach(s=>{ if(!salesByStore.has(s.store)) salesByStore.set(s.store,[]); salesByStore.get(s.store).push(s); });
+  returnsWithNum.forEach(ret=>{
+    const retBarcodes = new Set(ret.items.keys());
+    const cands = salesByStore.get(ret.store) || [];
+    cands.forEach(sale=>{
+      if(sale.num <= ret.num) return;
+      const saleBarcodes = sale.items;
+      let common = 0; retBarcodes.forEach(b=>{ if(saleBarcodes.has(b)) common++; });
+      if(common===0) return;
+      if(exchPairsSeen.has(ret.ref+'|'+sale.ref)) return;
+      if(hasDate && ret.date && sale.date){
+        const gapMin = (sale.date-ret.date)/60000;
+        if(gapMin>=0 && gapMin<=120) return;
+      }
+      const diff = Math.abs(ret.totalPieces - sale.totalPieces);
+      const overlapRatio = common / Math.max(retBarcodes.size,1);
+      if(overlapRatio>=0.5 && diff<=3){
+        if(!reorderMap.has(ret.ref)) reorderMap.set(ret.ref, []);
+        reorderMap.get(ret.ref).push({saleRef:sale.ref, diff, common});
+      }
+    });
+  });
+
+  /* ---- CHECK E: Customer Note documentation requirement on return invoices ---- */
+  const violationsE = new Map();
+  invoices.filter(i=>i.is_refund).forEach(inv=>{
+    const triggers = noteRequiredTriggers(inv);
+    if(triggers.length && !inv.customerNote) violationsE.set(inv.ref, triggers);
+  });
+
+  /* ---- CHECK F: offer bundle completeness on SALE invoices (same rule as Check A, applied to sales) ---- */
+  const violationsF = new Map();
+  invoices.filter(i=>!i.is_refund).forEach(inv=>{
+    inv.offerPieces.forEach((taken, offer)=>{
+      const m = /BUY\s*(\d+)\s*GET\s*(\d+)/i.exec(offer);
+      if(!m) return;
+      const buyN = +m[1], getN = +m[2], expected = getN - buyN;
+      if(expected<=0 || taken % expected !== 0){
+        if(!violationsF.has(inv.ref)) violationsF.set(inv.ref, []);
+        violationsF.get(inv.ref).push({offer, expected, taken});
+      }
+    });
+  });
+
+  /* ---- CHECK G: Customer Note documentation requirement on SALE invoices (same rule as Check E, applied to sales) ---- */
+  const violationsG = new Map();
+  invoices.filter(i=>!i.is_refund).forEach(inv=>{
+    const triggers = noteRequiredTriggers(inv);
+    if(triggers.length && !inv.customerNote) violationsG.set(inv.ref, triggers);
+  });
+
+  /* ---- build per-line records for return invoices ---- */
+  const records = [];
+  let serial = 0;
+  invoices.filter(i=>i.is_refund).forEach(inv=>{
+    const aViol = violationsA.get(inv.ref) || [];
+    const aOffers = new Set(aViol.map(v=>v.offer));
+    const bViol = violationsB.get(inv.ref) || [];
+    const bOffers = new Set(bViol.map(v=>v.offer));
+    const eTriggers = violationsE.get(inv.ref) || [];
+    const pairedRef = exchangePairMap.get(inv.ref) || null;
+    const isNoRepurchase = noRepurchaseRefs.has(inv.ref);
+    const tailOrigin = tailOfExchangeRefs.get(inv.ref) || null;
+    const reorders = reorderMap.get(inv.ref) || [];
+
+    inv.lines.forEach(line=>{
+      if(line.barcode==null) return;
+      serial++;
+      const qtyReturned = line.qty==null ? null : Math.abs(line.qty);
+      const lineTotal = line.subtotal==null ? null : Math.abs(line.subtotal);
+      const offer = line.offer;
+
+      const origin = findOriginSale(inv, line.barcode);
+      const saleDate = origin ? fmtDate(origin.date) : null;
+      let qtySold = null;
+      if(origin){
+        const ol = origin.lines.find(x=>x.barcode===line.barcode);
+        if(ol) qtySold = ol.qty;
+      }
+
+      const missing = [];
+      if(!origin) missing.push('لم يتم العثور على فاتورة البيع الأصلية لهذا الصنف ضمن بيانات هذا الملف');
+      if(!inv.phone) missing.push('رقم هاتف العميل غير مسجل على هذه الفاتورة');
+      if(!inv.date) missing.push('تاريخ/وقت الفاتورة غير مسجل');
+      if(!hasPhone) missing.push('هذا الملف لا يحتوي أصلًا على عمود أرقام هواتف — تعذّر تطبيق فحوصات التبديل والمرتجع النهائي');
+      if(hasPhone && !hasDate) missing.push('هذا الملف لا يحتوي على عمود تاريخ/وقت — تعذّر تحديد الفاصل الزمني بدقة');
+      if(!hasDiscountCol) missing.push('هذا الملف لا يحتوي على عمود نسبة خصم أو قيمة خصم — لم تُحسب نسبة خصم على الفاتورة');
+      if(!hasCustomerNoteCol) missing.push('هذا الملف لا يحتوي على عمود Customer Note (أو هو فارغ بالكامل) — تعذّر التحقق من تسجيل كود الخصم واسم الحملة لعروض النسبة');
+
+      const policyClauses = [];
+      const eligibilityResult = [];
+      const notes = [];
+      const decisionReason = [];
+      let status = 'مقبول';
+      let requiredAction = 'لا يوجد إجراء مطلوب';
+
+      if(offer && aOffers.has(offer)){
+        const v = aViol.find(x=>x.offer===offer);
+        policyClauses.push('سياسة إرجاع العروض: يجب إرجاع كل قطع عرض (BUY x GET y) معًا أو بمضاعفات كاملة لعدد القطع المجانية');
+        eligibilityResult.push(`عدد القطع المرتجعة من عرض "${offer}" (${v.returned}) ليس مضاعفًا لعدد القطع المجانية المطلوب (${v.expected})`);
+        status = 'مرفوض';
+        decisionReason.push('إرجاع جزئي لباقة عرض - مخالفة صريحة للسياسة المتفق عليها');
+        requiredAction = 'مراجعة الفاتورة مع الفرع واستكمال باقي قطع العرض أو تصحيح تسجيل المرتجع';
+      }
+      if(offer && bOffers.has(offer)){
+        const v = bViol.find(x=>x.offer===offer);
+        policyClauses.push('سياسة التبديل: التبديل على عرض يجب أن يكون إرجاع كامل ثم إعادة تسجيل بنفس عدد قطع العرض');
+        eligibilityResult.push(`عملية تبديل مع الفاتورة ${v.pairRef} خلال ${v.gapMin} دقيقة - عدد قطع العرض المرتجعة (${v.returned}) لا يساوي المعاد تسجيلها (${v.retaken})`);
+        status = 'مرفوض';
+        decisionReason.push('خطأ تبديل على عرض - عدم تطابق عدد القطع بين المرتجع وإعادة البيع');
+        requiredAction = 'مراجعة عملية التبديل والتأكد من تطابق عدد قطع العرض';
+      }
+      if(eTriggers.length){
+        const reasonsText = eTriggers.map(t=>t.label).join('؛ ');
+        policyClauses.push('سياسة توثيق الخصومات: عرض قطع مع خصم إضافي 10%، أو خصم بنسبة 20% أو 30%، أو أي عرض خصم بالنسبة غير مرتبط بعرض قطع، يجب أن يكون موثقًا بكود الخصم واسم الحملة في خانة Customer Note');
+        eligibilityResult.push(`لا توجد ملاحظة عميل (Customer Note) مسجلة على هذه الفاتورة رغم استيفاء شرط التوثيق: ${reasonsText}`);
+        status = 'مرفوض';
+        decisionReason.push('خصم يستوجب التوثيق بدون كود خصم/اسم حملة مسجل في Customer Note - مخالفة لسياسة التوثيق');
+        requiredAction = 'مراجعة الفاتورة والتأكد من تسجيل كود الخصم واسم الحملة في خانة Customer Note';
+      }
+      if(policyClauses.length===0){
+        policyClauses.push('لا يوجد شرط صريح في السياسة يحكم هذا الصنف بمفرده (لا يتضمن عرض باقة)');
+        eligibilityResult.push('لم يتم رصد أي مخالفة لشروط السياسة المعروفة (اكتمال إرجاع العروض / تطابق قطع التبديل)');
+      }
+      if(pairedRef && !bOffers.has(offer)){
+        notes.push(`جزء من عملية تبديل مع الفاتورة ${pairedRef} - متوافقة مع شرط التبديل`);
+      }
+      if(reorders.length){
+        if(status==='مقبول') status = 'يحتاج إلى مراجعة';
+        const refs = reorders.map(r=>r.saleRef).join('، ');
+        notes.push(`نمط مشتبه: نفس العميل/الفرع اشترى مرة أخرى أصناف مطابقة تقريبًا (فاتورة ${refs}) بفارق قطع 1-3 بعد هذا المرتجع - قد يكون تبديل غير مسجل كتبديل رسمي، يستدعي المراجعة اليدوية`);
+        decisionReason.push('نمط إعادة شراء بعد مرتجع بفرق قطع بسيط - غير محسوم تلقائيًا، يحتاج مراجعة بشرية');
+        if(requiredAction==='لا يوجد إجراء مطلوب') requiredAction = 'مراجعة يدوية لتأكيد ما إذا كانت العملية تبديل فعلي أو مرتجع نهائي منفصل';
+      }
+      if(isNoRepurchase) notes.push('مرتجع نهائي: لم يتم رصد أي عملية شراء من نفس العميل بعد هذا التاريخ ضمن بيانات هذا الملف');
+      if(tailOrigin) notes.push(`هذا الصنف تم الحصول عليه أصلًا من خلال عملية تبديل سابقة (الفاتورة ${tailOrigin}) ثم أُرجع نهائيًا - نهاية دورة تبديل وليس عميل فاقد جديد`);
+      if(decisionReason.length===0) decisionReason.push('لا توجد مخالفة لشروط السياسة المتاحة؛ تم القبول افتراضيًا لعدم وجود سبب للرفض وفق السياسة المرسلة');
+
+      records.push({
+        serial, ref: inv.ref, store: inv.store,
+        sale_date: saleDate, return_date: fmtDate(inv.date),
+        phone: inv.phone, barcode: line.barcode, product_name: line.name,
+        qty_sold: qtySold, qty_returned: qtyReturned, unit_price: line.price, line_total: lineTotal,
+        offer: offer, return_reason: null,
+        invoice_discount_pct: inv.discountPct, invoice_discount_source: inv.discountSource,
+        customer_note: inv.customerNote,
+        row_idx: line.idx, reviewed: false, reviewed_at: null,
+        policy_clauses: policyClauses, eligibility_result: eligibilityResult,
+        status, decision_reason: decisionReason, required_action: requiredAction,
+        notes, missing_data: missing,
+      });
+    });
+  });
+
+  /* ---- summary ---- */
+  const totalReturnInvoices = invoices.filter(i=>i.is_refund).length;
+  const totalReturnItems = records.length;
+  const totalReturnValue = records.reduce((s,r)=>s+(r.line_total||0),0);
+  const accepted = records.filter(r=>r.status==='مقبول');
+  const rejected = records.filter(r=>r.status==='مرفوض');
+  const review = records.filter(r=>r.status==='يحتاج إلى مراجعة');
+  const sumVal = l=> l.reduce((s,r)=>s+(r.line_total||0),0);
+
+  const summary = {
+    total_return_invoices: totalReturnInvoices, total_return_items: totalReturnItems,
+    total_return_value: totalReturnValue,
+    accepted_count: accepted.length, accepted_value: sumVal(accepted),
+    rejected_count: rejected.length, rejected_value: sumVal(rejected),
+    review_count: review.length, review_value: sumVal(review),
+    pct_accepted: totalReturnItems ? Math.round(1000*accepted.length/totalReturnItems)/10 : 0,
+    pct_rejected: totalReturnItems ? Math.round(1000*rejected.length/totalReturnItems)/10 : 0,
+    pct_review: totalReturnItems ? Math.round(1000*review.length/totalReturnItems)/10 : 0,
+  };
+
+  const itemAgg = new Map();
+  records.forEach(r=>{
+    if(!itemAgg.has(r.barcode)) itemAgg.set(r.barcode, {barcode:r.barcode, name:r.product_name, qty:0, value:0});
+    const a = itemAgg.get(r.barcode); a.qty += (r.qty_returned||0); a.value += (r.line_total||0);
+  });
+  const allItems = [...itemAgg.values()].sort((a,b)=>b.qty-a.qty);
+  const topItems = allItems.slice(0,15);
+
+  const custAgg = new Map();
+  records.forEach(r=>{
+    if(!r.phone) return;
+    if(!custAgg.has(r.phone)) custAgg.set(r.phone, {phone:r.phone, items:0, value:0, refs:new Set()});
+    const a = custAgg.get(r.phone); a.items++; a.value += (r.line_total||0); a.refs.add(r.ref);
+  });
+  const allCustomers = [...custAgg.values()]
+    .map(a=>({phone:a.phone, invoices:a.refs.size, items:a.items, value:a.value}))
+    .sort((a,b)=>b.items-a.items);
+  const topCustomers = allCustomers.slice(0,15);
+
+  const dayAgg = new Map();
+  records.forEach(r=>{
+    if(!r.return_date) return;
+    const d = r.return_date.slice(0,10);
+    if(!dayAgg.has(d)) dayAgg.set(d, {count:0, refs:new Set()});
+    const a = dayAgg.get(d); a.count++; a.refs.add(r.ref);
+  });
+  const timeDist = [...dayAgg.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
+    .map(([date,a])=>({date, count:a.count, invoices:a.refs.size}));
+
+  const reviewRefs = [...new Set(review.map(r=>r.ref))].sort();
+
+  const reconciliation = {
+    raw_rows_in_file: rawRows.length,
+    blank_separator_rows_excluded: blankRows.length,
+    usable_line_rows: rawRows.length - blankRows.length,
+    total_invoices_all_types: invoices.length,
+    sale_invoices: invoices.filter(i=>!i.is_refund).length,
+    return_invoices: totalReturnInvoices,
+    return_line_items_analyzed: totalReturnItems,
+  };
+
+  const analysisState = {
+    summary, records, topItems, topCustomers, allItems, allCustomers, timeDist, reviewRefs, reconciliation,
+    violationsA, violationsB, violationsE, violationsF, violationsG, noRepurchaseRefs, tailOfExchangeRefs, reorderMap,
+    hasPhone, hasDate, hasDiscountCol, hasCustomerNoteCol, refDates: [...refDatesMap.entries()],
+  };
+  renderReport(analysisState);
+  saveReportToDb(analysisState, {fileName: currentFileName, sheetName});
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+let STATE = null;
+let filtered = [];
+let sortKey='serial', sortDir=1;
+
+function statusClass(st){
+  if(st==='مقبول') return 'accepted';
+  if(st==='مرفوض') return 'rejected';
+  return 'review';
+}
+
+function renderReport(state){
+  STATE = state;
+  const {summary:s, reconciliation:r, hasPhone, hasDate} = state;
+
+  const noticeEl = $('dataNotice');
+  if(!hasPhone || !hasDate){
+    noticeEl.hidden = false;
+    noticeEl.innerHTML = `<b>تنبيه حدود البيانات:</b> ${
+      !hasPhone
+        ? 'لا يحتوي هذا الملف على عمود أرقام هواتف، لذلك لم يتم تطبيق فحوصات التبديل والمرتجع النهائي (تعتمد على تتبع العميل عبر فواتيره). تم تطبيق فحص إرجاع العروض ونمط إعادة الشراء المعتمد على رقم الفاتورة فقط.'
+        : 'لا يحتوي هذا الملف على عمود تاريخ/وقت، لذلك لم يتم استبعاد عمليات التبديل السريع (خلال 120 دقيقة) من فحص "إعادة الشراء بعد مرتجع"، وقد تتداخل النتائج مع تبديلات فعلية.'
+    }`;
+  }else{
+    noticeEl.hidden = true;
+  }
+
+  $('summaryCards').innerHTML = `
+    <div class="card scorecard accent"><div class="lbl">فواتير المرتجع</div><div class="val">${s.total_return_invoices}</div></div>
+    <div class="card scorecard accent"><div class="lbl">الأصناف المرتجعة</div><div class="val">${s.total_return_items}</div></div>
+    <div class="card scorecard accent"><div class="lbl">إجمالي القيمة</div><div class="val">${money(s.total_return_value)}</div></div>
+    <div class="card scorecard good"><div class="lbl">مقبول</div><div class="val">${s.accepted_count}</div><div class="sub">${money(s.accepted_value)} (${s.pct_accepted}%)</div></div>
+    <div class="card scorecard bad"><div class="lbl">مرفوض</div><div class="val">${s.rejected_count}</div><div class="sub">${money(s.rejected_value)} (${s.pct_rejected}%)</div></div>
+    <div class="card scorecard warn"><div class="lbl">يحتاج مراجعة</div><div class="val">${s.review_count}</div><div class="sub">${money(s.review_value)} (${s.pct_review}%)</div></div>
+  `;
+
+  $('reconTable').innerHTML = `
+    <tr><th>عدد صفوف الملف الأصلي (خام)</th><td class="mono">${r.raw_rows_in_file}</td></tr>
+    <tr><th>صفوف فارغة تمامًا مستبعدة</th><td class="mono">${r.blank_separator_rows_excluded}</td></tr>
+    <tr><th>صفوف أصناف قابلة للتحليل</th><td class="mono">${r.usable_line_rows}</td></tr>
+    <tr><th>إجمالي عدد الفواتير (بيع + مرتجع)</th><td class="mono">${r.total_invoices_all_types}</td></tr>
+    <tr><th>عدد فواتير البيع</th><td class="mono">${r.sale_invoices}</td></tr>
+    <tr><th>عدد فواتير المرتجع</th><td class="mono">${r.return_invoices}</td></tr>
+    <tr><th>سطور أصناف المرتجعات في الجدول التفصيلي</th><td class="mono"><b>${r.return_line_items_analyzed}</b></td></tr>
+  `;
+
+  const refTimeMap = new Map(state.refDates || []);
+  const rt = ref => refTimeMap.get(ref) || '';
+
+  renderChipList('checkAList', [...state.violationsA.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>`${x.offer} (${x.returned}/${x.expected})`).join('، ')}
+  )), 'لا توجد مخالفات.');
+  renderChipList('checkBList', [...state.violationsB.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>`مع ${x.pairRef} - ${x.offer} (${x.returned}/${x.retaken})`).join('، ')}
+  )), 'لا توجد أخطاء تبديل.');
+  renderChipList('checkCList', [...state.noRepurchaseRefs].map(ref=>({ref, time: rt(ref)})), 'لا توجد حالات.');
+  renderChipList('checkC2List', [...state.tailOfExchangeRefs.entries()].map(([ref,origin])=>(
+    {ref, time: rt(ref), detail: `أصل الصنف: ${origin}`}
+  )), 'لا توجد حالات.');
+  renderChipList('checkDList', [...state.reorderMap.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>`${x.saleRef} (فرق ${x.diff})`).join('، ')}
+  )), 'لا توجد حالات.');
+  renderChipList('checkEList', [...state.violationsE.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>x.label).join('، ')}
+  )), 'لا توجد حالات.');
+  renderChipList('checkFList', [...state.violationsF.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>`${x.offer} (${x.taken}/${x.expected})`).join('، ')}
+  )), 'لا توجد مخالفات.');
+  renderChipList('checkGList', [...state.violationsG.entries()].map(([ref,v])=>(
+    {ref, time: rt(ref), detail: v.map(x=>x.label).join('، ')}
+  )), 'لا توجد حالات.');
+
+  $('topItemsTable').innerHTML = '<tr><th>الكود</th><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr>' +
+    state.topItems.map(i=>`<tr><td class="mono">${i.barcode}</td><td>${i.name||''}</td><td class="mono">${i.qty}</td><td class="mono">${money(i.value)}</td></tr>`).join('') ||
+    '<tr><td class="empty-note">لا بيانات</td></tr>';
+
+  $('topCustomersTable').innerHTML = (state.topCustomers.length ? ('<tr><th>الهاتف</th><th>عدد الفواتير</th><th>عدد الأصناف</th><th>القيمة</th></tr>' +
+    state.topCustomers.map(c=>`<tr><td class="mono">${c.phone}</td><td class="mono">${c.invoices ?? ''}</td><td class="mono">${c.items}</td><td class="mono">${money(c.value)}</td></tr>`).join(''))
+    : '<tr><td class="empty-note">لا بيانات (لا يحتوي الملف على أرقام هواتف)</td></tr>');
+
+  $('timeDistTable').innerHTML = (state.timeDist.length ? ('<tr><th>التاريخ</th><th>عدد الفواتير</th><th>عدد الأصناف</th></tr>' +
+    state.timeDist.map(t=>`<tr><td class="mono">${t.date}</td><td class="mono">${t.invoices ?? ''}</td><td class="mono">${t.count}</td></tr>`).join(''))
+    : '<tr><td class="empty-note">لا بيانات (لا يحتوي الملف على تواريخ)</td></tr>');
+
+  const notesList = [
+    `تم استبعاد ${r.blank_separator_rows_excluded} صفًا فارغًا تمامًا من الملف الأصلي (بلا رقم فاتورة أو كود صنف أو كمية) من جدول التحليل.`,
+    'عمود "سبب المرتجع" غير موجود في معظم ملفات تصدير نقاط البيع المعتادة؛ أي قيمة فارغة في هذا الحقل تعني أن العمود غير متاح أصلًا في الملف.',
+    '"تاريخ البيع" لكل صنف مُشتق بمطابقة رقم هاتف العميل وكود الصنف مع آخر فاتورة بيع سابقة لنفس العميل ضمن هذا الملف فقط؛ قد يظهر فارغًا إذا كانت الفاتورة الأصلية خارج نطاق البيانات المرفوعة.',
+    'حالة "يحتاج إلى مراجعة" تُستخدم فقط لنمط "إعادة شراء بعد مرتجع بفارق 1-3 قطع" - نمط مشتبه وليس مخالفة مؤكدة للسياسة.',
+    'القيم المالية المعروضة مطابقة لعمود Subtotal في الملف الأصلي دون أي خصومات أو غرامات إضافية غير منصوص عليها في السياسة.',
+  ];
+  if(!state.hasPhone) notesList.push('هذا الملف لا يحتوي على عمود أرقام هواتف، لذلك فحوصات التبديل والمرتجع النهائي ونهاية دورة التبديل لم تُطبّق (تظهر فارغة أعلاه)، وتم الاعتماد فقط على رقم الفاتورة لفحص نمط إعادة الشراء.');
+  if(state.hasPhone && !state.hasDate) notesList.push('هذا الملف لا يحتوي على عمود تاريخ/وقت، لذلك لم تُستبعد عمليات التبديل السريع من فحص إعادة الشراء، وقد تظهر بعض عمليات التبديل الفعلية ضمن قائمة "يحتاج إلى مراجعة".');
+  if(!state.hasDiscountCol) notesList.push('هذا الملف لا يحتوي على عمود نسبة خصم أو قيمة خصم صريح، لذلك يظهر عمود "العرض / الخصم" باسم العرض فقط بدون نسبة خصم محسوبة.');
+  else notesList.push('نسبة الخصم المعروضة على مستوى الفاتورة مأخوذة من عمود نسبة الخصم في الملف عند توفره، أو محسوبة من عمود قيمة الخصم مقابل صافي قيمة الفاتورة عند غيابه.');
+  if(!state.hasCustomerNoteCol) notesList.push('هذا الملف لا يحتوي على عمود Customer Note (أو هو فارغ بالكامل)، لذلك أي فاتورة (بيع أو مرتجع) بها خصم يستوجب التوثيق تُعتبر تلقائيًا مخالفة لعدم توفر كود الخصم/اسم الحملة في هذه الخانة.');
+  else notesList.push('فحص "توثيق الخصومات في Customer Note" يُطبَّق متى وُجد عرض خصم بالنسبة (غير اشتر X واحصل على Y)، أو خصم إضافي 10% فوق عرض قطع، أو خصم بنسبة 20% أو 30% على الفاتورة - ويعتمد على خانة Customer Note في نفس الفاتورة كما وردت في الملف.');
+  notesList.push('فحوصات اكتمال العروض وتوثيق الخصومات (F وG) تُطبَّق أيضًا على فواتير البيع نفسها، وليس فقط على المرتجعات - راجع قسمي "فواتير البيع المخالفة للسياسة" أدناه.');
+  $('qualityNotes').innerHTML = notesList.map(n=>`<li>${n}</li>`).join('');
+
+  const stores = [...new Set(state.records.map(r=>r.store).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  const storeSel = $('storeFilter');
+  const prevStore = storeSel.value;
+  storeSel.innerHTML = '<option value="">كل الفروع</option>' + stores.map(s=>`<option value="${s}">${s}</option>`).join('');
+  if(stores.includes(prevStore)) storeSel.value = prevStore;
+
+  filtered = state.records.slice();
+  $('report').classList.add('show');
+  sortTable('serial', true);
+}
+
+function renderChipList(elId, items, emptyMsg){
+  const el = $(elId);
+  if(!items.length){ el.innerHTML = `<div class="empty-note">${emptyMsg}</div>`; return; }
+  el.innerHTML = items.map(it=>{
+    const timePart = it.time ? `<span class="ref-time">${it.time}</span>` : '';
+    const detailPart = it.detail ? `<span class="chip-detail">${it.detail}</span>` : '';
+    return `<span class="refchip">${it.ref}${timePart}${detailPart}</span>`;
+  }).join(' ');
+}
+
+function renderTable(){
+  const tbody = $('tblBody');
+  tbody.innerHTML = filtered.map(r=>{
+    const cls = statusClass(r.status);
+    return `<tr class="row-${cls}">
+      <td class="mono">${r.serial}</td>
+      <td class="mono">${r.ref}${r.return_date ? `<span class="ref-time-inline">${r.return_date}</span>` : ''}</td>
+      <td class="mono">${r.store||''}</td>
+      <td class="mono">${r.return_date||''}</td>
+      <td class="mono">${r.sale_date || '<span class="muted">غير متاح</span>'}</td>
+      <td class="mono">${r.phone || '<span class="muted">—</span>'}</td>
+      <td class="mono">${r.barcode}</td>
+      <td>${r.product_name||''}</td>
+      <td class="mono">${r.qty_returned ?? ''}</td>
+      <td class="mono">${money(r.line_total)}</td>
+      <td>${r.offer || '<span class="muted">لا يوجد</span>'}${r.invoice_discount_pct!=null ? `<span class="sub-line">خصم ${r.invoice_discount_pct}%</span>` : ''}</td>
+      <td><span class="badge ${cls}">${r.status}</span></td>
+      <td>
+        <select class="review-select ${r.reviewed?'done':''}" data-row-idx="${r.row_idx}">
+          <option value="0" ${!r.reviewed?'selected':''}>لم تتم المراجعة</option>
+          <option value="1" ${r.reviewed?'selected':''}>تمت المراجعة ✓</option>
+        </select>
+      </td>
+      <td><button class="detail-btn" data-serial="${r.serial}">عرض</button></td>
+    </tr>`;
+  }).join('');
+
+  let sumValT=0, sumQty=0, reviewedCount=0;
+  filtered.forEach(r=>{ sumValT += (r.line_total||0); sumQty += (r.qty_returned||0); if(r.reviewed) reviewedCount++; });
+  $('totalsBar').innerHTML = `<span>السجلات المعروضة: <b>${filtered.length}</b></span>
+    <span>إجمالي الكمية: <b>${sumQty}</b></span><span>إجمالي القيمة: <b>${money(sumValT)}</b></span>
+    <span>تمت مراجعتها: <b>${reviewedCount}</b> / ${filtered.length}</span>`;
+
+  tbody.querySelectorAll('.detail-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> openDetail(parseInt(btn.dataset.serial,10)));
+  });
+  tbody.querySelectorAll('.review-select').forEach(sel=>{
+    sel.addEventListener('change', ()=> toggleReviewed(parseInt(sel.dataset.rowIdx,10), sel.value==='1'));
+  });
+}
+
+function toggleReviewed(rowIdx, done){
+  if(!STATE) return;
+  const rec = STATE.records.find(r=>r.row_idx===rowIdx);
+  if(!rec) return;
+  rec.reviewed = done;
+  rec.reviewed_at = done ? new Date().toISOString() : null;
+  renderTable();
+  saveReportToDb(STATE, {fileName: currentFileName, sheetName: currentSheetName});
+}
+
+function applyFilters(){
+  const q = $('searchBox').value.trim().toLowerCase();
+  const st = $('statusFilter').value;
+  const storeSel = $('storeFilter').value;
+  const from = $('dateFrom').value, to = $('dateTo').value;
+  filtered = STATE.records.filter(r=>{
+    if(st && r.status!==st) return false;
+    if(storeSel && r.store!==storeSel) return false;
+    if(q){
+      const hay = [r.ref, r.phone, r.barcode, r.product_name].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    if(from){ const d=(r.return_date||'').slice(0,10); if(!d||d<from) return false; }
+    if(to){ const d=(r.return_date||'').slice(0,10); if(!d||d>to) return false; }
+    return true;
+  });
+  sortTable(sortKey, true);
+}
+
+function sortTable(key, keepDir){
+  if(!keepDir) sortDir = (sortKey===key) ? -sortDir : 1;
+  sortKey = key;
+  filtered.sort((a,b)=>{
+    let va=a[key], vb=b[key];
+    if(va==null) va=''; if(vb==null) vb='';
+    if(typeof va==='number' && typeof vb==='number') return (va-vb)*sortDir;
+    return String(va).localeCompare(String(vb),'ar')*sortDir;
+  });
+  renderTable();
+}
+
+document.querySelectorAll('thead th[data-key]').forEach(th=>{
+  th.addEventListener('click', ()=> sortTable(th.dataset.key));
+});
+$('searchBox').addEventListener('input', applyFilters);
+$('statusFilter').addEventListener('change', applyFilters);
+$('storeFilter').addEventListener('change', applyFilters);
+$('dateFrom').addEventListener('change', applyFilters);
+$('dateTo').addEventListener('change', applyFilters);
+$('resetFilters').addEventListener('click', ()=>{
+  $('searchBox').value=''; $('statusFilter').value=''; $('storeFilter').value=''; $('dateFrom').value=''; $('dateTo').value='';
+  applyFilters();
+});
+
+$('copyCsvBtn').addEventListener('click', async ()=>{
+  const cols = ['serial','ref','store','return_date','sale_date','phone','barcode','product_name','qty_sold','qty_returned','unit_price','line_total','offer','invoice_discount_pct','status','reviewed','required_action'];
+  const header = ['#','الفاتورة','الفرع','تاريخ المرتجع','تاريخ البيع','الهاتف','الكود','المنتج','الكمية المباعة','الكمية المرتجعة','سعر الوحدة','القيمة','العرض','نسبة الخصم %','الحالة','المراجعة','الإجراء المطلوب'];
+  let csv = header.join(',') + '\n';
+  filtered.forEach(r=>{
+    const row = cols.map(c=>{
+      let v = (c==='reviewed') ? (r.reviewed ? 'تمت المراجعة' : 'لم تتم المراجعة') : r[c];
+      if(v==null) v='';
+      v=String(v).replace(/"/g,'""'); return `"${v}"`;
+    });
+    csv += row.join(',') + '\n';
+  });
+  $('csvArea').value = csv;
+  $('csvOverlay').classList.add('open');
+  try{ await navigator.clipboard.writeText(csv); }
+  catch(e){ $('csvArea').focus(); $('csvArea').select(); }
+});
+$('closeCsv').addEventListener('click', ()=> $('csvOverlay').classList.remove('open'));
+$('csvOverlay').addEventListener('click', e=>{ if(e.target.id==='csvOverlay') e.currentTarget.classList.remove('open'); });
+
+function openDetail(serial){
+  const r = STATE.records.find(x=>x.serial===serial);
+  if(!r) return;
+  const cls = statusClass(r.status);
+  $('modalTitle').innerHTML = `سطر #${r.serial} — فاتورة ${r.ref} <span class="badge ${cls}">${r.status}</span>`;
+  $('modalContent').innerHTML = `
+    <div class="kv">
+      <b>الفرع</b><span>${r.store||''}</span>
+      <b>تاريخ المرتجع</b><span>${r.return_date||'غير متاح'}</span>
+      <b>تاريخ البيع</b><span>${r.sale_date||'غير متاح'}</span>
+      <b>رقم الهاتف</b><span>${r.phone||'غير مسجل'}</span>
+      <b>كود الصنف</b><span class="mono">${r.barcode}</span>
+      <b>اسم المنتج</b><span>${r.product_name||''}</span>
+      <b>الكمية المباعة</b><span>${r.qty_sold ?? 'غير متاح'}</span>
+      <b>الكمية المرتجعة</b><span>${r.qty_returned ?? ''}</span>
+      <b>سعر الوحدة</b><span class="mono">${money(r.unit_price)}</span>
+      <b>القيمة الإجمالية</b><span class="mono">${money(r.line_total)}</span>
+      <b>اسم العرض</b><span>${r.offer||'لا يوجد'}</span>
+      <b>نسبة الخصم على الفاتورة</b><span>${r.invoice_discount_pct!=null ? r.invoice_discount_pct+'% ('+(r.invoice_discount_source||'')+')' : 'غير متاح في البيانات'}</span>
+      <b>Customer Note</b><span>${r.customer_note||'غير مسجلة'}</span>
+      <b>سبب المرتجع</b><span>غير متاح في البيانات</span>
+    </div>
+    <p><b>شروط السياسة ذات الصلة:</b></p><ul>${r.policy_clauses.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <p><b>نتيجة فحص الأهلية:</b></p><ul>${r.eligibility_result.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <p><b>سبب القرار:</b></p><ul>${r.decision_reason.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <p><b>الإجراء المطلوب:</b> ${r.required_action}</p>
+    ${r.notes.length ? `<p><b>ملاحظات:</b></p><ul>${r.notes.map(x=>`<li>${x}</li>`).join('')}</ul>` : ''}
+    ${r.missing_data.length ? `<p><b>بيانات ناقصة:</b></p><ul>${r.missing_data.map(x=>`<li>${x}</li>`).join('')}</ul>` : ''}
+  `;
+  $('modalOverlay').classList.add('open');
+}
+$('closeModal').addEventListener('click', ()=> $('modalOverlay').classList.remove('open'));
+$('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') e.currentTarget.classList.remove('open'); });
+
+/* ============================================================
+   DETAILED EXCEL EXPORT (dashboard + full notes)
+   ============================================================ */
+function buildExcelWorkbook(state, meta){
+  const wb = XLSX.utils.book_new();
+  const refTimeMap = new Map(state.refDates || []);
+  const fullDate = ref => refTimeMap.get(ref) || '';
+  const s = state.summary, r = state.reconciliation;
+
+  const dash = [];
+  dash.push(['لوحة بيانات المرتجعات']);
+  dash.push([`الملف: ${meta.fileName||'—'}`, `الورقة: ${meta.sheetName||'—'}`, `تاريخ إعداد التقرير: ${fmtDate(new Date())}`]);
+  dash.push([]);
+  dash.push(['المؤشر','القيمة']);
+  dash.push(['فواتير المرتجع', s.total_return_invoices]);
+  dash.push(['الأصناف المرتجعة', s.total_return_items]);
+  dash.push(['إجمالي القيمة', s.total_return_value]);
+  dash.push(['مقبول - عدد', s.accepted_count]); dash.push(['مقبول - قيمة', s.accepted_value]); dash.push(['مقبول - نسبة %', s.pct_accepted]);
+  dash.push(['مرفوض - عدد', s.rejected_count]); dash.push(['مرفوض - قيمة', s.rejected_value]); dash.push(['مرفوض - نسبة %', s.pct_rejected]);
+  dash.push(['يحتاج مراجعة - عدد', s.review_count]); dash.push(['يحتاج مراجعة - قيمة', s.review_value]); dash.push(['يحتاج مراجعة - نسبة %', s.pct_review]);
+  dash.push([]);
+  dash.push(['التسوية العددية']);
+  dash.push(['صفوف الملف الأصلي (خام)', r.raw_rows_in_file]);
+  dash.push(['صفوف فارغة مستبعدة', r.blank_separator_rows_excluded]);
+  dash.push(['صفوف أصناف قابلة للتحليل', r.usable_line_rows]);
+  dash.push(['إجمالي عدد الفواتير', r.total_invoices_all_types]);
+  dash.push(['عدد فواتير البيع', r.sale_invoices]);
+  dash.push(['عدد فواتير المرتجع', r.return_invoices]);
+  dash.push(['سطور أصناف محللة', r.return_line_items_analyzed]);
+  dash.push([]);
+  dash.push(['مخالفات فواتير البيع']);
+  dash.push(['فواتير بيع بمخالفة اكتمال عرض', state.violationsF.size]);
+  dash.push(['فواتير بيع تستوجب توثيق Customer Note', state.violationsG.size]);
+  dash.push([]);
+  dash.push(['الأصناف الأكثر تكرارًا في المرتجعات']);
+  dash.push(['كود الصنف','اسم المنتج','الكمية','القيمة']);
+  (state.allItems || state.topItems).forEach(i=> dash.push([i.barcode, i.name||'', i.qty, i.value]));
+  dash.push([]);
+  dash.push(['العملاء الأكثر طلبًا للمرتجعات']);
+  dash.push(['رقم الهاتف','عدد الفواتير','عدد الأصناف','القيمة']);
+  (state.allCustomers || state.topCustomers).forEach(c=> dash.push([c.phone, c.invoices ?? '', c.items, c.value]));
+  dash.push([]);
+  dash.push(['توزيع المرتجعات حسب اليوم']);
+  dash.push(['التاريخ','عدد الفواتير','عدد الأصناف']);
+  state.timeDist.forEach(t=> dash.push([t.date, t.invoices ?? '', t.count]));
+
+  const wsDash = XLSX.utils.aoa_to_sheet(dash);
+  wsDash['!cols'] = [{wch:30},{wch:22},{wch:16},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsDash, 'لوحة البيانات');
+
+  const detHeader = ['#','الفاتورة','الفرع','تاريخ المرتجع','تاريخ البيع','الهاتف','كود الصنف','اسم المنتج',
+    'الكمية المباعة','الكمية المرتجعة','سعر الوحدة','القيمة','اسم العرض','نسبة الخصم %','مصدر نسبة الخصم','سبب المرتجع','الحالة','تمت المراجعة',
+    'شروط السياسة ذات الصلة','نتيجة فحص الأهلية','سبب القرار','الإجراء المطلوب','ملاحظات','بيانات ناقصة'];
+  const detRows = [detHeader];
+  state.records.forEach(rec=>{
+    detRows.push([
+      rec.serial, rec.ref, rec.store||'', rec.return_date||'', rec.sale_date||'', rec.phone||'',
+      rec.barcode, rec.product_name||'', rec.qty_sold ?? '', rec.qty_returned ?? '', rec.unit_price ?? '', rec.line_total ?? '',
+      rec.offer||'', rec.invoice_discount_pct ?? '', rec.invoice_discount_source||'', rec.return_reason || 'غير متاح في البيانات', rec.status,
+      rec.reviewed ? 'تمت المراجعة' : 'لم تتم المراجعة',
+      (rec.policy_clauses||[]).join(' ؛ '), (rec.eligibility_result||[]).join(' ؛ '), (rec.decision_reason||[]).join(' ؛ '),
+      rec.required_action||'', (rec.notes||[]).join(' ؛ '), (rec.missing_data||[]).join(' ؛ '),
+    ]);
+  });
+  const wsDet = XLSX.utils.aoa_to_sheet(detRows);
+  const detWidths = [6,16,14,16,16,13,14,26,10,10,10,10,14,12,22,20,13,16,32,32,30,26,34,30];
+  wsDet['!cols'] = detHeader.map((h,i)=>({wch: detWidths[i]||16}));
+  XLSX.utils.book_append_sheet(wb, wsDet, 'تفاصيل المرتجعات');
+
+  function addRefSheet(name, header, rows){
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    ws['!cols'] = header.map(()=>({wch:18}));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+
+  addRefSheet('مخالفات العروض',
+    ['الفاتورة','التاريخ والوقت','اسم العرض','المتوقع (مضاعف)','المرتجع فعليًا'],
+    [...state.violationsA.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.offer, it.expected, it.returned])));
+
+  addRefSheet('أخطاء التبديل',
+    ['الفاتورة','التاريخ والوقت','الفاتورة المقابلة','اسم العرض','الفارق (دقيقة)','مرتجع','معاد تسجيله'],
+    [...state.violationsB.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.pairRef, it.offer, it.gapMin, it.returned, it.retaken])));
+
+  addRefSheet('مرتجعات تستوجب توثيق Customer Note',
+    ['الفاتورة','التاريخ والوقت','سبب التوثيق المطلوب'],
+    [...state.violationsE.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.label])));
+
+  addRefSheet('مخالفات اكتمال عرض - فواتير بيع',
+    ['الفاتورة','التاريخ والوقت','اسم العرض','المتوقع (مضاعف)','المباع فعليًا'],
+    [...state.violationsF.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.offer, it.expected, it.taken])));
+
+  addRefSheet('فواتير بيع تستوجب توثيق Customer Note',
+    ['الفاتورة','التاريخ والوقت','سبب التوثيق المطلوب'],
+    [...state.violationsG.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.label])));
+
+  addRefSheet('مرتجع نهائي بدون شراء',
+    ['الفاتورة','التاريخ والوقت'],
+    [...state.noRepurchaseRefs].map(ref=>[ref, fullDate(ref)]));
+
+  addRefSheet('نهاية دورة تبديل',
+    ['الفاتورة','التاريخ والوقت','فاتورة أصل الصنف (تبديل سابق)'],
+    [...state.tailOfExchangeRefs.entries()].map(([ref,origin])=>[ref, fullDate(ref), origin]));
+
+  addRefSheet('نمط مشبوه',
+    ['الفاتورة','التاريخ والوقت','فاتورة إعادة الشراء','فرق القطع','أصناف مشتركة'],
+    [...state.reorderMap.entries()].flatMap(([ref,items])=> items.map(it=>[ref, fullDate(ref), it.saleRef, it.diff, it.common])));
+
+  return XLSX.write(wb, {type:'array', bookType:'xlsx'});
+}
+
+async function downloadExcel(){
+  if(!STATE) return;
+  const btn = $('downloadXlsxBtn');
+  const statusEl = $('xlsxStatus');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'جارِ التجهيز...';
+  statusEl.textContent = '';
+  try{
+    const buf = buildExcelWorkbook(STATE, {fileName: currentFileName, sheetName: currentSheetName});
+    const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const baseName = currentFileName ? currentFileName.replace(/\.[^.]+$/, '') : 'تقرير_المرتجعات';
+    const filename = baseName + '_تفصيلي.xlsx';
+
+    let DOWNLOADS = null;
+    try{ if(typeof claude !== 'undefined' && claude.use) DOWNLOADS = await claude.use('downloads'); }catch(e){ DOWNLOADS = null; }
+
+    if(DOWNLOADS){
+      await DOWNLOADS.save({filename, data: blob});
+      statusEl.textContent = 'تم تنزيل الملف ✓';
+    }else{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      statusEl.textContent = 'تم تنزيل الملف ✓';
+    }
+  }catch(e){
+    if(e && e.code === 'declined'){ statusEl.textContent = ''; }
+    else statusEl.textContent = 'تعذّر إنشاء ملف Excel. حاول مرة أخرى.';
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+$('downloadXlsxBtn').addEventListener('click', downloadExcel);
+
+(async function boot(){
+  await initCapabilities();
+  if(!DB) return;
+  const saved = await loadReportFromDb();
+  if(!saved) return;
+  uploadZone.hidden = true;
+  $('newFileBtn').hidden = false;
+  $('statusBar').classList.add('show');
+  currentFileName = saved._meta.fileName || null;
+  currentSheetName = saved._meta.sheetName || null;
+  $('statusFname').textContent = saved._meta.fileName ? saved._meta.fileName : 'تقرير محفوظ';
+  const d = saved._meta.generatedAt ? new Date(saved._meta.generatedAt) : null;
+  $('statusFmeta').textContent = `آخر تحليل محفوظ على هذا الرابط${d ? ' بتاريخ ' + fmtDate(d) : ''}${saved._meta.sheetName ? ' • ورقة "' + saved._meta.sheetName + '"' : ''}`;
+  setSaveStatus('محفوظ على هذا الرابط ✓');
+  renderReport(saved);
+})();
+
+})();
+</script>
+</body>
+</html>

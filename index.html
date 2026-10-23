@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>تسجيل الدخول — RAVIN Quality Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#56061F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RAVIN QC">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* If already signed in, skip straight to the app — blocking & inline so there's no flash of the login form. */
+(function(){
+  try{
+    var raw = localStorage.getItem('ravin_qc_session_v1');
+    if(raw){ location.replace('app.html'); }
+  }catch(e){}
+})();
+</script>
+<style>
+:root{
+  --bg:#FAF9F6; --surface:#FFFFFF; --surface-2:#F3F1EC; --line:#E2DFD6; --line-strong:#CBC6B8;
+  --ink:#201C17; --ink-soft:#5B564C; --ink-faint:#8B8578;
+  --wine:#7A1230; --wine-deep:#56061F; --gold:#A9802F; --gold-tint:#F7EFDD;
+  --fail:#A3281E; --fail-tint:#FBE8E6;
+  --radius:3px; --radius-lg:6px; --font:'Cairo',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#15130F; --surface:#1D1A15; --surface-2:#242019; --line:#352F26; --line-strong:#4A4234;
+    --ink:#EFEAE0; --ink-soft:#BCB4A3; --ink-faint:#8B8575; --gold-tint:#2A2212; --fail-tint:#2E1310; }
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;min-height:100vh;font-family:var(--font);background:var(--bg);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+  background-image:radial-gradient(circle at 20% 20%, rgba(169,128,47,.08), transparent 40%),
+                    radial-gradient(circle at 80% 85%, rgba(122,18,48,.10), transparent 45%);
+}
+.card{
+  width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);box-shadow:0 10px 40px -16px rgba(32,28,23,.25);
+  padding:34px 30px 28px;border-top:4px solid var(--wine-deep);
+}
+.logo{text-align:center;margin-bottom:22px;}
+.logo .mark{font-weight:900;font-size:30px;letter-spacing:1px;color:var(--wine-deep);}
+.logo .sub{font-size:12.5px;color:var(--gold);font-weight:700;letter-spacing:1.5px;margin-top:4px;}
+.logo .tag{font-size:11.5px;color:var(--ink-faint);margin-top:10px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;color:var(--ink-faint);margin-bottom:6px;font-weight:700;}
+.field input{
+  width:100%;border:1px solid var(--line-strong);border-radius:var(--radius);padding:11px 12px;
+  font-family:inherit;font-size:15px;background:var(--surface);color:var(--ink);
+}
+.field input:focus{outline:2px solid var(--wine);outline-offset:1px;border-color:var(--wine);}
+.err{display:none;background:var(--fail-tint);color:var(--fail);border:1px dashed var(--fail);
+  border-radius:var(--radius);padding:9px 11px;font-size:12.5px;margin-bottom:14px;font-weight:600;text-align:center;}
+.err.show{display:block;}
+.btn-login{
+  width:100%;border:none;background:var(--wine-deep);color:#fff;padding:12px;border-radius:var(--radius);
+  font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.3px;
+}
+.btn-login:hover{background:var(--wine);}
+.hint{margin-top:18px;text-align:center;font-size:11px;color:var(--ink-faint);line-height:1.7;}
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm" autocomplete="off">
+    <div class="logo">
+      <div class="mark">RAVIN</div>
+      <div class="sub">QUALITY CONTROL</div>
+      <div class="tag">نظام تقييم زيارات الجودة</div>
+    </div>
+    <div class="err" id="loginErr">اسم المستخدم أو كلمة المرور غير صحيحة</div>
+    <div class="field">
+      <label for="username">اسم المستخدم</label>
+      <input type="text" id="username" placeholder="مثال: SHAKER أو كود الفرع" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">كلمة المرور</label>
+      <input type="password" id="password" placeholder="••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" type="submit">تسجيل الدخول</button>
+    <div class="hint">مستخدمو الفروع: الدخول بكود الفرع — عرض فقط لزياراتكم.</div>
+  </form>
+
+<script src="auth.js"></script>
+<script>
+"use strict";
+var form = document.getElementById('loginForm');
+var errBox = document.getElementById('loginErr');
+form.addEventListener('submit', function(e){
+  e.preventDefault();
+  var u = document.getElementById('username').value;
+  var p = document.getElementById('password').value;
+  var session = RavinAuth.login(u, p);
+  if(session){ location.href = 'app.html'; }
+  else { errBox.classList.add('show'); }
+});
+</script>
+</body>
+</html>
